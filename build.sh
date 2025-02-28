@@ -1,0 +1,1 @@
+go build -o whatsmeow-bot main.go
