@@ -10,6 +10,8 @@ import (
     "go.mau.fi/whatsmeow/types/events"
     waProto "go.mau.fi/whatsmeow/binary/proto"
     "google.golang.org/protobuf/proto"
+
+	"whatsmeow-bot/utils"
 )
 
 // Register the StatusCommand
@@ -24,12 +26,11 @@ func (c *StatusCommand) Execute(client *whatsmeow.Client, message *events.Messag
     fmt.Println("--- SENDING STATUS UPDATE ---")
 
     if len(args) == 0 {
-        fmt.Println("No text provided for status update.")
-        return
+		args[0] = "" // allow empty statuses
     }
 
     if !message.Info.IsFromMe {
-        // Prevent processing own messages for status updates
+		utils.React(client, message, "❌")
         return
     }
 
@@ -38,18 +39,17 @@ func (c *StatusCommand) Execute(client *whatsmeow.Client, message *events.Messag
 
 	// Ensure the message is a text message
 	if message.Info.Type != "text" {
+		utils.React(client, message, "❌")
 		return
 	}
-
-	var reaction *waProto.Message
 
 	// Construct the status update message
 	statusMessage := &waProto.Message{
 		ExtendedTextMessage: &waProto.ExtendedTextMessage{
 			Text:           proto.String(statusText),
-			BackgroundArgb: proto.Uint32(0xFF000000), // Example ARGB color (black)
-			TextArgb:       proto.Uint32(0xFFFFFFFF), // Example ARGB color (white)
-			Font:           waProto.ExtendedTextMessage_SYSTEM.Enum(), // Example font
+			BackgroundArgb: proto.Uint32(0xFF000000), // black
+			TextArgb:       proto.Uint32(0xFFFFFFFF), // white
+			Font:           waProto.ExtendedTextMessage_SYSTEM.Enum(),
 		},
 	}
 
@@ -57,20 +57,10 @@ func (c *StatusCommand) Execute(client *whatsmeow.Client, message *events.Messag
 	_, err := client.SendMessage(context.Background(), types.StatusBroadcastJID, statusMessage)
 	if err != nil {
 		fmt.Printf("Failed to post status update: %v\n", err)
-		reaction = client.BuildReaction(message.Info.Chat, message.Info.Sender, message.Info.ID, "❌")
+		utils.React(client, message, "❌")
 	} else {
-		fmt.Println("Status update posted successfully.")
-		reaction = client.BuildReaction(message.Info.Chat, message.Info.Sender, message.Info.ID, "✅")
+		utils.React(client, message, "✅")
 	}
-
-	// Send the reaction
-	if reaction != nil {
-		_, err := client.SendMessage(context.Background(), message.Info.Chat, reaction)
-		if err != nil {
-			fmt.Printf("Failed to send reaction: %v\n", err)
-		}
-	}
-
 }
 
 func (c *StatusCommand) Name() string {

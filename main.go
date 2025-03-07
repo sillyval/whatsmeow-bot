@@ -8,6 +8,7 @@ import (
     "os"
     "os/signal"
     "strings"
+    "regexp"
     "syscall"
 
     "whatsmeow-bot/commands" // Replace with your actual module path
@@ -24,6 +25,8 @@ type Config struct {
     Prefixes []string `json:"prefixes"`
 }
 
+var argRegex = regexp.MustCompile(`"((?:[^"\\]|\\.|[\n])*)"|(\S+)`)
+
 func LoadConfig(filename string) (*Config, error) {
     configBytes, err := ioutil.ReadFile(filename)
     if err != nil {
@@ -36,14 +39,35 @@ func LoadConfig(filename string) (*Config, error) {
     return &config, nil
 }
 
+func parseArguments(input string) []string {
+    matches := argRegex.FindAllStringSubmatch(input, -1)
+    var args []string
+    for _, match := range matches {
+        if match[1] != "" { // Quoted argument
+            unescaped := strings.ReplaceAll(match[1], `\"`, `"`)
+            args = append(args, unescaped)
+        } else { // Unquoted argument
+            args = append(args, match[2])
+        }
+    }
+    return args
+}
+
 func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}) {
     return func(evt interface{}) {
         if v, ok := evt.(*events.Message); ok {
+
+            //fmt.Printf("New message: \n%+v\n", v.Message)
+
             var messageBody string
             if v.Message.Conversation != nil {
                 messageBody = *v.Message.Conversation
             } else if v.Message.ExtendedTextMessage != nil {
                 messageBody = *v.Message.ExtendedTextMessage.Text
+            } else if v.Message.ImageMessage.Caption != nil {
+                messageBody = *v.Message.ImageMessage.Caption
+            } else if v.Message.VideoMessage.Caption != nil {
+                messageBody = *v.Message.VideoMessage.Caption
             }
 
             var messagePrefix string
@@ -58,7 +82,7 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 return
             }
 
-            args := strings.Fields(messageBody[len(messagePrefix):])
+            args := parseArguments(messageBody[len(messagePrefix):])
             if len(args) == 0 {
                 return
             }
@@ -76,7 +100,11 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
 }
 
 func main() {
-    dbLog := waLog.Stdout("Database", "DEBUG", true)
+
+    fmt.Println("Starting client...")
+
+    dbLog := waLog.Stdout("Database", "ERROR", true) // DEBUG for full log
+    clientLog := waLog.Stdout("Client", "ERROR", true) // ditto
     container, err := sqlstore.New("sqlite3", "file:credentials.db?_foreign_keys=on", dbLog)
     if err != nil {
         panic(err)
@@ -85,7 +113,6 @@ func main() {
     if err != nil {
         panic(err)
     }
-    clientLog := waLog.Stdout("Client", "DEBUG", true)
     client := whatsmeow.NewClient(deviceStore, clientLog)
 
     config, err := LoadConfig("config.json")
@@ -111,6 +138,7 @@ func main() {
         if err != nil {
             panic(err)
         }
+        fmt.Println("Client running!")
     }
 
     c := make(chan os.Signal, 1)
