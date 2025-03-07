@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"mime"
 
+	"io"
     "net/http"
+
 	"github.com/golang/protobuf/proto"
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -53,36 +55,47 @@ func Message(client *whatsmeow.Client, messageEvent *events.Message, message str
 }
 func Reply(client *whatsmeow.Client, messageEvent *events.Message, message string) bool {
     if client != nil {
-        var quotedMessage *waProto.Message
-        if quoted := messageEvent.Message.GetConversation(); quoted != "" {
-            quotedMessage = &waProto.Message{
-                ExtendedTextMessage: &waProto.ExtendedTextMessage{
-                    Text: proto.String(message),
-                    ContextInfo: &waProto.ContextInfo{
-                        StanzaID:    proto.String(messageEvent.Info.ID),
-                        Participant: proto.String(messageEvent.Info.Sender.String()),
-                        QuotedMessage: messageEvent.Message,
-                    },
-                },
-            }
-        }
+		quotedMessage := &waProto.Message{
+			ExtendedTextMessage: &waProto.ExtendedTextMessage{
+				Text: proto.String(message),
+				ContextInfo: &waProto.ContextInfo{
+					StanzaID:    proto.String(messageEvent.Info.ID),
+					Participant: proto.String(messageEvent.Info.Sender.String()),
+					QuotedMessage: messageEvent.Message,
+				},
+			},
+		}
 
-        if quotedMessage != nil {
-            _, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, quotedMessage)
-            if err != nil {
-                fmt.Printf("Failed to send '%s': %s", message, err)
-                return false
-            } else {
-                return true
-            }
+        _, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, quotedMessage)
+        if err != nil {
+            fmt.Printf("Failed to send '%s': %s", message, err)
+            return false
+        } else {
+            return true
         }
     } else {
         fmt.Println("Client is not initialized")
         return false
     }
-    return false
 }
-
+func GetImageMessageFromData(client *whatsmeow.Client, imageData[]byte, caption string) *waProto.Message {
+	uploaded, err := client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
+	if err != nil {
+		fmt.Printf("Failed to upload file: %v", err)
+		return nil
+	}
+	message := &waProto.Message{ImageMessage: &waProto.ImageMessage{
+		Caption:       proto.String(caption),
+		URL:           proto.String(uploaded.URL),
+		DirectPath:    proto.String(uploaded.DirectPath),
+		MediaKey:      uploaded.MediaKey,
+		Mimetype:      proto.String(http.DetectContentType(imageData)),
+		FileEncSHA256: uploaded.FileEncSHA256,
+		FileSHA256:    uploaded.FileSHA256,
+		FileLength:    proto.Uint64(uint64(len(imageData))),
+	}}
+	return message
+}
 func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]byte, string, error) {
 	// Ensure that the client and message are not nil
 	if client == nil || message == nil {
@@ -155,6 +168,25 @@ func GetImageFromMessage(client *whatsmeow.Client, imageMessage *waProto.ImageMe
 
 	return data, mimeType, nil
 }
+func DownloadMediaFromURL(mediaURL string) ([]byte, string, error) {
+    resp, err := http.Get(mediaURL)
+    if err != nil {
+        return nil, "", fmt.Errorf("error downloading media: %v", err)
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return nil, "", fmt.Errorf("failed to download media: HTTP %d", resp.StatusCode)
+    }
+
+    mimeType := resp.Header.Get("Content-Type")
+    media, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, "", fmt.Errorf("failed to read media content: %v", err)
+    }
+
+    return media, mimeType, nil
+}
 func GetStickerFromMessage(client *whatsmeow.Client, stickerMessage *waProto.StickerMessage) ([]byte, string, error) {
     if client == nil || stickerMessage == nil {
         return nil, "", fmt.Errorf("invalid client or sticker message")
@@ -186,21 +218,9 @@ func SendImage(client *whatsmeow.Client, messageEvent *events.Message, imageData
 		return false
 	}
 
-	uploaded, err := client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
-	if err != nil {
-		fmt.Printf("Failed to upload file: %v", err)
-		return false
-	}
-	message := &waProto.Message{ImageMessage: &waProto.ImageMessage{
-		Caption:       proto.String(caption),
-		URL:           proto.String(uploaded.URL),
-		DirectPath:    proto.String(uploaded.DirectPath),
-		MediaKey:      uploaded.MediaKey,
-		Mimetype:      proto.String(http.DetectContentType(imageData)),
-		FileEncSHA256: uploaded.FileEncSHA256,
-		FileSHA256:    uploaded.FileSHA256,
-		FileLength:    proto.Uint64(uint64(len(imageData))),
-	}}
+	var err error
+	message := GetImageMessageFromData(client, imageData, caption)
+
 	_, err = client.SendMessage(context.Background(), messageEvent.Info.Chat, message)
 	if err != nil {
 		fmt.Printf("Error sending image message: %v", err)
@@ -233,9 +253,9 @@ func ReplyImage(client *whatsmeow.Client, messageEvent *events.Message, imageDat
 			FileSHA256:    uploaded.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(imageData))),
 			ContextInfo: &waProto.ContextInfo{
-				StanzaID:    proto.String(messageEvent.Info.ID), // Reply to the original message
+				StanzaID:    proto.String(messageEvent.Info.ID),
 				Participant: proto.String(messageEvent.Info.Sender.String()),
-				QuotedMessage: messageEvent.Message, // The message being replied to
+				QuotedMessage: messageEvent.Message,
 			},
 		},
 	}

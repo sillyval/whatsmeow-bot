@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+    "net/url"
 
 	"github.com/disintegration/imaging"
 	"go.mau.fi/whatsmeow"
@@ -32,6 +33,10 @@ func deepfryImage(img image.Image) ([]byte, error) {
     }
     return buf.Bytes(), nil
 }
+func isValidURL(link string) bool {
+    _, err := url.ParseRequestURI(link)
+    return err == nil
+}
 
 func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
 
@@ -43,7 +48,10 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		imageMessage = message.Message.ImageMessage
 	} else if message.Message.StickerMessage != nil {
 		stickerMessage = message.Message.StickerMessage
+	} else if isValidURL(args[0]) {
+		// handled later on
 	} else {
+		
 		// Check for quoted messages that might contain an image or sticker
 		if message.Message.ExtendedTextMessage == nil {
 			utils.Reply(client, message, "No image or sticker found")
@@ -81,7 +89,10 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		media, mimetype, err = utils.GetImageFromMessage(client, imageMessage)
 	} else if stickerMessage != nil {
 		media, mimetype, err = utils.GetStickerFromMessage(client, stickerMessage)
+	} else if len(args) > 0 && isValidURL(args[0]) {
+        media, mimetype, err = utils.DownloadMediaFromURL(args[0])
 	} else {
+		fmt.Printf("url: %s, is valid? %t", args[0], isValidURL(args[0]))
 		utils.Reply(client, message, "No image or sticker found")
 		utils.React(client, message, "❌")
 		return
