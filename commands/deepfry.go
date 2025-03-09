@@ -48,7 +48,7 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		imageMessage = message.Message.ImageMessage
 	} else if message.Message.StickerMessage != nil {
 		stickerMessage = message.Message.StickerMessage
-	} else if isValidURL(args[0]) {
+	} else if len(args) > 0 && isValidURL(args[0]) {
 		// handled later on
 	} else {
 		
@@ -140,8 +140,7 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		return
 	}
 
-	// Send the deep-fried image/sticker back
-	success := utils.ReplyImage(client, message, deepfriedImage, mimetype, "deepfried image")
+	success := utils.ReplyImage(client, message, deepfriedImage, mimetype, "")
 	if success {
 		utils.React(client, message, "✅")
 	} else {
@@ -151,4 +150,8 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 
 func (c *DeepfryCommand) Name() string {
     return "deepfry"
+}
+
+func (c *DeepfryCommand) Description() string {
+    return "Deepfries a given image"
 }

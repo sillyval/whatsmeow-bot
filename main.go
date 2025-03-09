@@ -8,7 +8,6 @@ import (
     "os"
     "os/signal"
     "strings"
-    "regexp"
     "syscall"
 
     "whatsmeow-bot/commands" // Replace with your actual module path
@@ -19,13 +18,61 @@ import (
     waLog "go.mau.fi/whatsmeow/util/log"
 
     _ "github.com/mattn/go-sqlite3"
+    "whatsmeow-bot/utils"
 )
 
 type Config struct {
     Prefixes []string `json:"prefixes"`
 }
 
-var argRegex = regexp.MustCompile(`"((?:[^"\\]|\\.|[\n])*)"|(\S+)`)
+
+func parseArguments(input string) []string {
+    var args []string
+    current := strings.Builder{}
+    inQuotes := false
+    escaping := false
+
+    for i := 0; i < len(input); i++ {
+        ch := input[i]
+
+        if escaping {
+            current.WriteByte(ch)
+            escaping = false
+            continue
+        }
+
+        switch ch {
+        case '\\':
+            if inQuotes {
+                escaping = true
+            } else {
+                current.WriteByte(ch)
+            }
+        case '"':
+            if inQuotes {
+                args = append(args, current.String())
+                current.Reset()
+            }
+            inQuotes = !inQuotes
+        case ' ':
+            if inQuotes {
+                current.WriteByte(ch)
+            } else if current.Len() > 0 {
+                args = append(args, current.String())
+                current.Reset()
+            }
+        default:
+            current.WriteByte(ch)
+        }
+    }
+
+    if current.Len() > 0 {
+        args = append(args, current.String())
+    }
+
+    return args
+}
+
 
 func LoadConfig(filename string) (*Config, error) {
     configBytes, err := ioutil.ReadFile(filename)
@@ -39,19 +86,6 @@ func LoadConfig(filename string) (*Config, error) {
     return &config, nil
 }
 
-func parseArguments(input string) []string {
-    matches := argRegex.FindAllStringSubmatch(input, -1)
-    var args []string
-    for _, match := range matches {
-        if match[1] != "" { // Quoted argument
-            unescaped := strings.ReplaceAll(match[1], `\"`, `"`)
-            args = append(args, unescaped)
-        } else { // Unquoted argument
-            args = append(args, match[2])
-        }
-    }
-    return args
-}
 
 func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}) {
     return func(evt interface{}) {
@@ -59,16 +93,7 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
 
             //fmt.Printf("New message: \n%+v\n", v.Message)
 
-            var messageBody string
-            if v.Message.Conversation != nil {
-                messageBody = *v.Message.Conversation
-            } else if v.Message.ExtendedTextMessage != nil {
-                messageBody = *v.Message.ExtendedTextMessage.Text
-            } else if v.Message.ImageMessage.Caption != nil {
-                messageBody = *v.Message.ImageMessage.Caption
-            } else if v.Message.VideoMessage.Caption != nil {
-                messageBody = *v.Message.VideoMessage.Caption
-            }
+            messageBody := utils.GetMessageBody(v.Message)
 
             var messagePrefix string
             for _, prefix := range config.Prefixes {

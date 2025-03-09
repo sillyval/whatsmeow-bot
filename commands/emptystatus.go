@@ -68,3 +68,7 @@ func (c *EmptyStatusCommand) Execute(client *whatsmeow.Client, message *events.M
 func (c *EmptyStatusCommand) Name() string {
     return "emptystatus"
 }
+
+func (c *EmptyStatusCommand) Description() string {
+    return ""
+}

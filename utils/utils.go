@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 	"mime"
+	"strings"
 
 	"io"
-    "net/http"
+	"net/http"
 
 	"github.com/golang/protobuf/proto"
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types/events"
+	"go.mau.fi/whatsmeow/types"
 )
 
 func React(client *whatsmeow.Client, messageEvent *events.Message, emoji string) bool {
@@ -54,7 +56,7 @@ func Message(client *whatsmeow.Client, messageEvent *events.Message, message str
 	}
 }
 func Reply(client *whatsmeow.Client, messageEvent *events.Message, message string) bool {
-    if client != nil {
+	if client != nil {
 		quotedMessage := &waProto.Message{
 			ExtendedTextMessage: &waProto.ExtendedTextMessage{
 				Text: proto.String(message),
@@ -66,17 +68,51 @@ func Reply(client *whatsmeow.Client, messageEvent *events.Message, message strin
 			},
 		}
 
-        _, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, quotedMessage)
-        if err != nil {
-            fmt.Printf("Failed to send '%s': %s", message, err)
-            return false
-        } else {
-            return true
-        }
-    } else {
-        fmt.Println("Client is not initialized")
-        return false
-    }
+		_, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, quotedMessage)
+		if err != nil {
+			fmt.Printf("Failed to send '%s': %s", message, err)
+			return false
+		} else {
+			return true
+		}
+	} else {
+		fmt.Println("Client is not initialized")
+		return false
+	}
+}
+func GetMessageBody(message *waProto.Message) string {
+	var messageBody string
+	if message.Conversation != nil {
+		messageBody = *message.Conversation
+	} else if message.ExtendedTextMessage != nil {
+		messageBody = *message.ExtendedTextMessage.Text
+	} else if message.ImageMessage != nil && message.ImageMessage.Caption != nil {
+		messageBody = *message.ImageMessage.Caption
+	} else if message.VideoMessage != nil && message.VideoMessage.Caption != nil {
+		messageBody = *message.VideoMessage.Caption
+	}
+	return messageBody
+}
+func ReplyMessage(client *whatsmeow.Client, chatJID types.JID, message *waProto.Message, contextInfo *waProto.ContextInfo, reply string) bool {
+	if client != nil {
+		quotedMessage := &waProto.Message{
+			ExtendedTextMessage: &waProto.ExtendedTextMessage{
+				Text: &reply,
+				ContextInfo: contextInfo,
+			},
+		}
+
+		_, err := client.SendMessage(context.Background(), chatJID, quotedMessage)
+		if err != nil {
+			fmt.Printf("Failed to send '%s': %s", message, err)
+			return false
+		} else {
+			return true
+		}
+	} else {
+		fmt.Println("Client is not initialized")
+		return false
+	}
 }
 func GetImageMessageFromData(client *whatsmeow.Client, imageData[]byte, caption string) *waProto.Message {
 	uploaded, err := client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
@@ -169,37 +205,37 @@ func GetImageFromMessage(client *whatsmeow.Client, imageMessage *waProto.ImageMe
 	return data, mimeType, nil
 }
 func DownloadMediaFromURL(mediaURL string) ([]byte, string, error) {
-    resp, err := http.Get(mediaURL)
-    if err != nil {
-        return nil, "", fmt.Errorf("error downloading media: %v", err)
-    }
-    defer resp.Body.Close()
+	resp, err := http.Get(mediaURL)
+	if err != nil {
+		return nil, "", fmt.Errorf("error downloading media: %v", err)
+	}
+	defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        return nil, "", fmt.Errorf("failed to download media: HTTP %d", resp.StatusCode)
-    }
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("failed to download media: HTTP %d", resp.StatusCode)
+	}
 
-    mimeType := resp.Header.Get("Content-Type")
-    media, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return nil, "", fmt.Errorf("failed to read media content: %v", err)
-    }
+	mimeType := resp.Header.Get("Content-Type")
+	media, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read media content: %v", err)
+	}
 
-    return media, mimeType, nil
+	return media, mimeType, nil
 }
 func GetStickerFromMessage(client *whatsmeow.Client, stickerMessage *waProto.StickerMessage) ([]byte, string, error) {
-    if client == nil || stickerMessage == nil {
-        return nil, "", fmt.Errorf("invalid client or sticker message")
-    }
-    mimeType := "image/webp"
+	if client == nil || stickerMessage == nil {
+		return nil, "", fmt.Errorf("invalid client or sticker message")
+	}
+	mimeType := "image/webp"
 
-    mediaKey := stickerMessage.GetMediaKey()
-    mediaEncSHA256 := stickerMessage.GetFileEncSHA256()
-    mediaSHA256 := stickerMessage.GetFileSHA256()
-    mediaURL := stickerMessage.GetURL()
-    mediaDirectPath := stickerMessage.GetDirectPath()
+	mediaKey := stickerMessage.GetMediaKey()
+	mediaEncSHA256 := stickerMessage.GetFileEncSHA256()
+	mediaSHA256 := stickerMessage.GetFileSHA256()
+	mediaURL := stickerMessage.GetURL()
+	mediaDirectPath := stickerMessage.GetDirectPath()
 
-    imageMessage := &waProto.ImageMessage{
+	imageMessage := &waProto.ImageMessage{
 		Caption:       proto.String(""),
 		URL:           proto.String(mediaURL),
 		DirectPath:    proto.String(mediaDirectPath),
@@ -210,7 +246,7 @@ func GetStickerFromMessage(client *whatsmeow.Client, stickerMessage *waProto.Sti
 		//FileLength:    proto.Uint64(uint64(len(imageData))),
 	}
 
-    return GetImageFromMessage(client, imageMessage)
+	return GetImageFromMessage(client, imageMessage)
 }
 func SendImage(client *whatsmeow.Client, messageEvent *events.Message, imageData []byte, mimeType string, caption string) bool {
 	if client == nil {
@@ -224,9 +260,9 @@ func SendImage(client *whatsmeow.Client, messageEvent *events.Message, imageData
 	_, err = client.SendMessage(context.Background(), messageEvent.Info.Chat, message)
 	if err != nil {
 		fmt.Printf("Error sending image message: %v", err)
-        return false
+		return false
 	} else {
-        return true
+		return true
 	}
 
 }
@@ -267,4 +303,138 @@ func ReplyImage(client *whatsmeow.Client, messageEvent *events.Message, imageDat
 	}
 
 	return true
+}
+func ReplyImageToQuoted(client *whatsmeow.Client, message *events.Message, quotedMsgID string, imageData []byte, mimeType string, caption string) bool {
+	jid := message.Info.Chat
+
+	uploaded, err := client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
+	if err != nil {
+		return false
+	}
+
+	msg := &waProto.Message{
+		ImageMessage: &waProto.ImageMessage{
+			URL:        proto.String(uploaded.URL),
+			Mimetype:   proto.String(mimeType),
+			Caption:    proto.String(caption),
+			DirectPath: proto.String(uploaded.DirectPath),
+			MediaKey:   uploaded.MediaKey,
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256: uploaded.FileSHA256,
+			FileLength: proto.Uint64(uint64(len(imageData))),
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:  proto.String(quotedMsgID),
+				Participant: proto.String(message.Info.Sender.String()),
+			},
+		},
+	}
+
+	_, err = client.SendMessage(context.Background(), jid, msg)
+	return err == nil
+}
+func ReplyImageToChat(client *whatsmeow.Client, message *events.Message, jid types.JID, quotedMsgID string, imageData []byte, mimeType string, caption string) bool {
+	uploaded, err := client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
+	if err != nil {
+		return false
+	}
+
+	msg := &waProto.Message{
+		ImageMessage: &waProto.ImageMessage{
+			URL:        proto.String(uploaded.URL),
+			Mimetype:   proto.String(mimeType),
+			Caption:    proto.String(caption),
+			DirectPath: proto.String(uploaded.DirectPath),
+			MediaKey:   uploaded.MediaKey,
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256: uploaded.FileSHA256,
+			FileLength: proto.Uint64(uint64(len(imageData))),
+			ContextInfo: &waProto.ContextInfo{
+				StanzaID:  proto.String(quotedMsgID),
+				Participant: proto.String(message.Info.Sender.String()),
+			},
+		},
+	}
+
+	_, err = client.SendMessage(context.Background(), jid, msg)
+	return err == nil
+}
+func SendMessageWithMentions(client *whatsmeow.Client, chatJID types.JID, message string, mentions []string) bool {
+	if client == nil {
+		fmt.Println("Client is not initialized")
+		return false
+	}
+
+	var err error
+
+	// chatJID, err := types.ParseJID(chatJIDString)
+	// if err != nil {
+	//     fmt.Println("Invalid JID format")
+	//     return false
+	// }
+
+	var mentionedJIDs []string
+	for _, mention := range mentions {
+		if !strings.HasSuffix(mention, "@s.whatsapp.net") {
+			mention = mention + "@s.whatsapp.net"
+		}
+		mentionedJIDs = append(mentionedJIDs, mention)
+
+		atStr := "@" + mention[:strings.Index(mention, "@")]
+		message = strings.ReplaceAll(message, "@"+mention[:strings.Index(mention, "@")], atStr)
+	}
+
+	contextInfo := &waProto.ContextInfo{
+		MentionedJID: mentionedJIDs,
+	}
+
+	textMessage := &waProto.Message{
+		ExtendedTextMessage: &waProto.ExtendedTextMessage{
+			Text:        proto.String(message),
+			ContextInfo: contextInfo,
+		},
+	}
+
+	_, err = client.SendMessage(context.Background(), chatJID, textMessage)
+	if err != nil {
+		fmt.Printf("Failed to send message with mentions: %v\n", err)
+		return false
+	}
+
+	return true
+}
+func GetReplyChain(message *events.Message) []string {
+    var chain []string
+    currentMessage := message
+
+    for currentMessage != nil {
+        var messageContent string
+
+        if currentMessage.Message.Conversation != nil {
+            messageContent = *currentMessage.Message.Conversation
+        } else if currentMessage.Message.ExtendedTextMessage != nil {
+            messageContent = *currentMessage.Message.ExtendedTextMessage.Text
+        }
+
+        if messageContent != "" {
+            chain = append([]string{messageContent}, chain...)
+        }
+
+        if currentMessage.Message.ExtendedTextMessage != nil && currentMessage.Message.ExtendedTextMessage.ContextInfo != nil {
+            quotedMessage := currentMessage.Message.ExtendedTextMessage.ContextInfo.QuotedMessage
+            if quotedMessage != nil {
+                currentMessage = &events.Message{
+                    Info:    currentMessage.Info,
+                    Message: quotedMessage,
+                }
+            } else {
+                break
+            }
+        } else {
+            break
+        }
+    }
+
+	fmt.Println(chain)
+
+    return chain
 }

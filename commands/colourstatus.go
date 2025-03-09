@@ -1,16 +1,16 @@
 package commands
 
 import (
-    "context"
-    "fmt"
-    "strings"
+	"context"
+	"fmt"
 	"strconv"
+	"strings"
 
-    "go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow"
+	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types"
-    "go.mau.fi/whatsmeow/types/events"
-    waProto "go.mau.fi/whatsmeow/binary/proto"
-    "google.golang.org/protobuf/proto"
+	"go.mau.fi/whatsmeow/types/events"
+	"google.golang.org/protobuf/proto"
 
 	"whatsmeow-bot/utils"
 )
@@ -43,35 +43,29 @@ func (c *ColourStatusCommand) Execute(client *whatsmeow.Client, message *events.
 	}
 
 	if len(args) == 2 {
-		//fmt.Println("No text provided for status update.")
-		//return
-
 		args[2] = "" // allow empty statuses
 	}
 
 	if !message.Info.IsFromMe {
-		fmt.Println("Command isn't coming from own number")
-		utils.React(client, message, "❌")
+		// Prevent processing own messages for status updates
 		return
 	}
 
 	// Join the arguments to form the status text
 	statusText := strings.Join(args[2:], " ")
+
 	// Ensure the message is a text message
-    
 	if message.Info.Type != "text" {
-		fmt.Println("Failed, message info type not text")
 		utils.React(client, message, "❌")
 		return
 	}
-
 
 	// Construct the status update message
 	statusMessage := &waProto.Message{
 		ExtendedTextMessage: &waProto.ExtendedTextMessage{
 			Text:           proto.String(statusText),
-			BackgroundArgb: proto.Uint32(stringToARGB(args[0])),
-			TextArgb:       proto.Uint32(stringToARGB(args[1])),
+			BackgroundArgb: proto.Uint32(stringToARGB(args[0])),       // Example ARGB color (black)
+			TextArgb:       proto.Uint32(stringToARGB(args[1])),       // Example ARGB color (white)
 			Font:           waProto.ExtendedTextMessage_SYSTEM.Enum(), // Example font
 		},
 	}
@@ -85,8 +79,13 @@ func (c *ColourStatusCommand) Execute(client *whatsmeow.Client, message *events.
 		fmt.Println("Status update posted successfully.")
 		utils.React(client, message, "✅")
 	}
+
 }
 
 func (c *ColourStatusCommand) Name() string {
-    return "colourstatus"
+	return "colourstatus"
+}
+
+func (c *ColourStatusCommand) Description() string {
+	return ""
 }

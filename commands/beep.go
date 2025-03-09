@@ -20,3 +20,7 @@ func (c *BeepCommand) Execute(client *whatsmeow.Client, message *events.Message,
 func (c *BeepCommand) Name() string {
     return "beep"
 }
+
+func (c *BeepCommand) Description() string {
+    return "Replies 'boop!'"
+}

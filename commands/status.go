@@ -66,3 +66,7 @@ func (c *StatusCommand) Execute(client *whatsmeow.Client, message *events.Messag
 func (c *StatusCommand) Name() string {
     return "status"
 }
+
+func (c *StatusCommand) Description() string {
+    return ""
+}
