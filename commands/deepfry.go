@@ -38,7 +38,7 @@ func isValidURL(link string) bool {
     return err == nil
 }
 
-func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
 
 	var imageMessage *waProto.ImageMessage
 	var stickerMessage *waProto.StickerMessage
@@ -56,20 +56,20 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		if message.Message.ExtendedTextMessage == nil {
 			utils.Reply(client, message, "No image or sticker found")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 	
 		contextInfo := message.Message.ExtendedTextMessage.GetContextInfo()
 		if contextInfo == nil {
 			utils.Reply(client, message, "No image or sticker found")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 	
 		if contextInfo.QuotedMessage == nil {
 			utils.Reply(client, message, "No image or sticker found")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 
 		// Check if quoted message contains an image or sticker
@@ -95,14 +95,14 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		fmt.Printf("url: %s, is valid? %t", args[0], isValidURL(args[0]))
 		utils.Reply(client, message, "No image or sticker found")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	if err != nil {
 		fmt.Println(err)
 		utils.Reply(client, message, "Failed to download media.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	// Decode image (whether it is an image or sticker, we decode it the same way)
@@ -111,7 +111,7 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		fmt.Println(err)
 		utils.Reply(client, message, "Unsupported image format.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	// Convert WebP stickers to PNG if needed
@@ -122,13 +122,13 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 			fmt.Println(err)
 			utils.Reply(client, message, "Failed to convert to PNG.")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 		img, _, err = image.Decode(buf)
 		if err != nil {
 			utils.Reply(client, message, "Failed to process image.")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 	}
 
@@ -137,7 +137,7 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 	if err != nil {
 		utils.Reply(client, message, "Failed to process image.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	success := utils.ReplyImage(client, message, deepfriedImage, mimetype, "")
@@ -146,6 +146,8 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 	} else {
 		utils.React(client, message, "❌")
 	}
+
+	return nil
 }
 
 func (c *DeepfryCommand) Name() string {

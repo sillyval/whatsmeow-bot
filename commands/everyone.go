@@ -14,10 +14,10 @@ func init() {
 
 type PingAllCommand struct{}
 
-func (c *PingAllCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *PingAllCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     if !message.Info.IsGroup {
         utils.Reply(client, message, "This command can only be used in a group!")
-        return
+        return nil
     }
 
 	appendMessage := strings.Join(args, " ")
@@ -27,7 +27,7 @@ func (c *PingAllCommand) Execute(client *whatsmeow.Client, message *events.Messa
     if err != nil {
         fmt.Println("Error fetching group info:", err)
         utils.Reply(client, message, "Failed to retrieve group information.")
-        return
+        return nil
     }
     
     //myJID := client.Store.ID.ToNonAD().User
@@ -42,7 +42,7 @@ func (c *PingAllCommand) Execute(client *whatsmeow.Client, message *events.Messa
     
     if len(mentions) == 0 {
         utils.Reply(client, message, "No members to mention!")
-        return
+        return nil
     }
 
     messageText := "@everyone"
@@ -54,6 +54,8 @@ func (c *PingAllCommand) Execute(client *whatsmeow.Client, message *events.Messa
 	}
     utils.SendMessageWithMentions(client, message.Info.Chat, formattedMessage, mentions)
     utils.React(client, message, "✅")
+
+    return nil
 }
 
 func (c *PingAllCommand) Name() string {

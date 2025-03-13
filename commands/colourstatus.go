@@ -31,7 +31,7 @@ func stringToARGB(colorStr string) uint32 {
 	return uint32(color)
 }
 
-func (c *ColourStatusCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *ColourStatusCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
 
 	fmt.Println("--- SENDING STATUS UPDATE ---")
 
@@ -48,7 +48,7 @@ func (c *ColourStatusCommand) Execute(client *whatsmeow.Client, message *events.
 
 	if !message.Info.IsFromMe {
 		// Prevent processing own messages for status updates
-		return
+		return nil
 	}
 
 	// Join the arguments to form the status text
@@ -57,7 +57,7 @@ func (c *ColourStatusCommand) Execute(client *whatsmeow.Client, message *events.
 	// Ensure the message is a text message
 	if message.Info.Type != "text" {
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	// Construct the status update message
@@ -71,7 +71,7 @@ func (c *ColourStatusCommand) Execute(client *whatsmeow.Client, message *events.
 	}
 
 	// Use types.StatusBroadcastJID for posting status updates
-	_, err := client.SendMessage(context.Background(), types.StatusBroadcastJID, statusMessage)
+	response, err := client.SendMessage(context.Background(), types.StatusBroadcastJID, statusMessage)
 	if err != nil {
 		fmt.Printf("Failed to post status update: %v\n", err)
 		utils.React(client, message, "❌")
@@ -80,6 +80,7 @@ func (c *ColourStatusCommand) Execute(client *whatsmeow.Client, message *events.
 		utils.React(client, message, "✅")
 	}
 
+	return &response.ID
 }
 
 func (c *ColourStatusCommand) Name() string {

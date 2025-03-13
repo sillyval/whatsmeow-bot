@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"mime"
 	"strings"
+	"bytes"
+	"image"
+	"image/png"
+	"os/exec"
 
 	"io"
 	"net/http"
@@ -205,6 +209,77 @@ func GetImageFromMessage(client *whatsmeow.Client, imageMessage *waProto.ImageMe
 	mimeType := imageMessage.GetMimetype()
 
 	return data, mimeType, nil
+}
+func ConvertToPNG(mediaData []byte) []byte {
+	img, _, err := image.Decode(bytes.NewReader(mediaData))
+	if err != nil {
+		fmt.Printf("\nfailed to decode image: %v\n", err)
+		return []byte{ }
+	}
+
+	var pngBuffer bytes.Buffer
+	err = png.Encode(&pngBuffer, img)
+	if err != nil {
+		fmt.Printf("\nfailed to encode image to PNG: %v\n", err)
+		return []byte{ }
+	}
+
+	return pngBuffer.Bytes()
+}
+func ConvertToMP4(mediaData []byte) []byte {
+	cmd := exec.Command("ffmpeg",
+		"-y",                           // Overwrite output files without asking
+		"-i", "pipe:0",                 // Input from stdin
+		"-movflags", "frag_keyframe+empty_moov", // Fix for non-seekable output
+		"-pix_fmt", "yuv420p",          // Ensure compatibility
+		"-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", // Ensure even dimensions
+		"-c:v", "libx264",              // Use H.264 video codec
+		"-preset", "fast",              // Encoding preset
+		"-crf", "23",                   // Quality level (23 is default)
+		"-c:a", "aac",                  // Audio codec
+		"-b:a", "128k",                 // Audio bitrate
+		"-f", "mp4",                    // Output format
+		"pipe:1")                       // Output to stdout
+
+	cmd.Stdin = bytes.NewReader(mediaData)
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("\nFFmpeg error: %v, details: %s\n", err, stderr.String())
+		return nil
+	}
+
+	return output.Bytes()
+}
+func ConvertToMP3(mediaData []byte) []byte {
+	cmd := exec.Command("ffmpeg",
+		"-y",                   // Overwrite output files without asking
+		"-i", "pipe:0",         // Input comes from stdin
+		"-vn",                  // Disable video (audio-only output)
+		"-c:a", "libmp3lame",   // Use LAME for MP3 encoding
+		"-q:a", "2",            // VBR quality (~190-220 kbps, better than CBR 192k)
+		"-ar", "44100",         // Set audio sampling rate to 44.1kHz
+		"-ac", "2",             // Set stereo audio
+		"-f", "mp3",            // Output format
+		"pipe:1")               // Output to stdout
+
+	// Set stdin and stdout
+	cmd.Stdin = bytes.NewReader(mediaData)
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Execute FFmpeg command
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("\nFFmpeg error: %v, details: %s\n", err, stderr.String())
+		return nil
+	}
+
+	return output.Bytes()
 }
 func DownloadMediaFromURL(mediaURL string) ([]byte, string, error) {
 	resp, err := http.Get(mediaURL)
@@ -480,6 +555,27 @@ func IsDeletedMessage(msg *events.Message) bool {
 	if msg.Message.GetProtocolMessage() != nil {
 		protoMsg := msg.Message.GetProtocolMessage()
 		if *protoMsg.Type == waProto.ProtocolMessage_REVOKE {
+			return true
+		}
+	}
+	return false
+}
+func GetDeletedMessageID(msg *events.Message) *string {
+	if msg.Message.GetProtocolMessage() != nil {
+		protoMsg := msg.Message.GetProtocolMessage()
+		if *protoMsg.Type == waProto.ProtocolMessage_REVOKE {
+			return protoMsg.Key.ID
+		}
+	}
+	return nil
+}
+func IsIncomingMessage(msg *events.Message) bool {
+	return msg.Message.GetProtocolMessage() == nil
+}
+func IsEditedMessage(msg *events.Message) bool {
+	if msg.Message.GetProtocolMessage() != nil {
+		protoMsg := msg.Message.GetProtocolMessage()
+		if *protoMsg.Type == waProto.ProtocolMessage_MESSAGE_EDIT {
 			return true
 		}
 	}

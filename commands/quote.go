@@ -20,18 +20,18 @@ func init() {
 
 type QuoteCommand struct{}
 
-func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
 	if message.Message.ExtendedTextMessage == nil {
 		utils.Reply(client, message, "You need to reply to a message to use this command.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	contextInfo := message.Message.ExtendedTextMessage.GetContextInfo()
 	if contextInfo == nil || contextInfo.QuotedMessage == nil {
 		utils.Reply(client, message, "You need to reply to a message to use this command.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	quotedMsg := contextInfo.QuotedMessage
@@ -41,12 +41,12 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 	if quotedText == "" {
 		utils.Reply(client, message, "Quoted message must contain text.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 	if quotedText[0] == ' ' {
 		utils.Reply(client, message, "You can't quote the AI.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	var err error
@@ -56,7 +56,7 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 	if err != nil {
 		fmt.Println("Error parsing JID")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	contact, err := client.Store.Contacts.GetContact(parsedJID)
@@ -83,21 +83,21 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 		if err != nil {
 			utils.Reply(client, message, "Failed to create profile picture placeholder.")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 	} else {
 		profilePicData, _, err := utils.DownloadMediaFromURL(profilePic.URL)
 		if err != nil {
 			utils.Reply(client, message, "Failed to download profile picture.")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 
 		err = ioutil.WriteFile(savePath, profilePicData, 0644)
 		if err != nil {
 			utils.Reply(client, message, "Failed to save profile picture.")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 	}
 
@@ -109,14 +109,14 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 		fmt.Println("Failed to execute quote.py:", err)
 		utils.Reply(client, message, "Failed to generate quote image.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	imageData, err := ioutil.ReadFile(outputPath)
 	if err != nil {
 		utils.Reply(client, message, "Failed to read generated image.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	success := utils.ReplyImageToQuoted(client, message, *contextInfo.StanzaID, imageData, "image/png", "")
@@ -128,6 +128,8 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 
 	os.Remove(savePath)
 	os.Remove(outputPath)
+
+	return nil
 }
 
 func (c *QuoteCommand) Name() string {

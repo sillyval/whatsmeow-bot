@@ -13,8 +13,9 @@ func init() {
 
 type BeepCommand struct{}
 
-func (c *BeepCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *BeepCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     utils.Reply(client, message, "boop!")
+    return nil
 }
 
 func (c *BeepCommand) Name() string {

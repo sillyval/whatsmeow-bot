@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"strings"
 	"mime"
+	"strings"
+	"whatsmeow-bot/utils"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -77,7 +79,37 @@ func FindOrCreateForum(jid, contactName, whatsappUsername string) (string, error
 	return thread.ID, nil
 }
 
-func LogStatus(jid, contactName, whatsappUsername, statusText string, colour *int) error {
+func JIDToPhoneNumber(jid string) string {
+	phoneNumber := strings.Split(jid, "@")[0]
+	return "+" + phoneNumber[0:2] + " " + phoneNumber[2:]
+}
+
+func formatAMPM(hour int) string {
+    if hour < 12 {
+        return "am"
+    }
+    return "pm"
+}
+
+func FormatDateWithOrdinal(t time.Time) string {
+    day := t.Day()
+    suffix := "th"
+    if day%10 == 1 && day != 11 {
+        suffix = "st"
+    } else if day%10 == 2 && day != 12 {
+        suffix = "nd"
+    } else if day%10 == 3 && day != 13 {
+        suffix = "rd"
+    }
+
+    // Format the output string
+    return fmt.Sprintf("%d%s %s %d, %d:%02d%s",
+        day, suffix, t.Month().String(), t.Year(), t.Hour()%12, t.Minute(), formatAMPM(t.Hour()))
+}
+
+func LogStatus(jid, contactName, whatsappUsername, statusText, statusJID string, colour *int) error {
+	jid = JIDToPhoneNumber(jid)
+
 	threadID, err := FindOrCreateForum(jid, contactName, whatsappUsername)
 	if err != nil {
 		return err
@@ -88,9 +120,16 @@ func LogStatus(jid, contactName, whatsappUsername, statusText string, colour *in
 		colour = &colourDefault
 	}
 
+	currentTime := FormatDateWithOrdinal(time.Now())
+
+	footer := &discordgo.MessageEmbedFooter{
+		Text: fmt.Sprintf("%s • %s", currentTime, statusJID),
+	}
+
 	embed := &discordgo.MessageEmbed{
 		Title:       "",
 		Description: statusText,
+		Footer:      footer,
 		Color:       *colour,
 	}
 
@@ -105,6 +144,7 @@ func LogStatus(jid, contactName, whatsappUsername, statusText string, colour *in
 
 	return nil
 }
+
 
 func GetFileExtension(mimetype string) string {
 	exts, err := mime.ExtensionsByType(mimetype)
@@ -122,13 +162,15 @@ func GetFileExtension(mimetype string) string {
 }
 
 
-func LogStatusWithMedia(jid string, contactName string, whatsappUsername string, statusText string, mediaData []byte, mimetype string) error {
+func LogStatusWithMedia(jid, contactName, whatsappUsername, statusText, statusJID string, mediaData []byte, mimetype string) error {
+	
+	jid = JIDToPhoneNumber(jid)
+
 	threadID, err := FindOrCreateForum(jid, contactName, whatsappUsername)
 	if err != nil {
 		return err
 	}
 
-	// Update thread name if necessary
 	_, err = session.ChannelEditComplex(threadID, &discordgo.ChannelEdit{
 		Name: fmt.Sprintf("%s / %s / %s", jid, contactName, whatsappUsername),
 	})
@@ -136,15 +178,21 @@ func LogStatusWithMedia(jid string, contactName string, whatsappUsername string,
 		log.Println("Couldn't update the name of the thread:", err)
 	}
 
+	currentTime := FormatDateWithOrdinal(time.Now())
+
+	footer := &discordgo.MessageEmbedFooter{
+		Text: fmt.Sprintf("%s • %s", currentTime, statusJID),
+	}
+
 	embed := &discordgo.MessageEmbed{
 		Title:       "",
 		Description: statusText,
+		Footer:      footer,
 		Color:       0xffbeef,
 	}
 
 	file := &discordgo.File{
 		Name:   "whatsapp-status-log",
-		Reader: bytes.NewReader(mediaData),
 	}
 
 	msg := &discordgo.MessageSend{
@@ -152,19 +200,22 @@ func LogStatusWithMedia(jid string, contactName string, whatsappUsername string,
 		Files:  []*discordgo.File{file},
 	}
 
-	fileExt := GetFileExtension(mimetype)
-	file.Name = file.Name + fileExt
-
 	if strings.HasPrefix(mimetype, "image/") {
 		embed.Image = &discordgo.MessageEmbedImage{
-			URL: "attachment://whatsapp-status-log." + fileExt,
+			URL: "attachment://whatsapp-status-log.png",
 		}
+		file.Reader = bytes.NewReader(utils.ConvertToPNG(mediaData))
+		file.Name = file.Name + ".png"
 	} else if strings.HasPrefix(mimetype, "video/") {
 		embed.Video = &discordgo.MessageEmbedVideo{
-			URL: "attachment://whatsapp-status-log." + fileExt,
+			URL: "attachment://whatsapp-status-log.mp4",
 		}
+		file.Reader = bytes.NewReader(utils.ConvertToMP4(mediaData))
+		file.Name = file.Name + ".mp4"
 	} else if strings.HasPrefix(mimetype, "audio/") {
-		// No direct way of sending it
+		// No direct way of embedding
+		file.Reader = bytes.NewReader(utils.ConvertToMP3(mediaData))
+		file.Name = file.Name + ".mp3"
 	}
 
 	_, err = session.ChannelMessageSendComplex(threadID, msg)
@@ -175,6 +226,46 @@ func LogStatusWithMedia(jid string, contactName string, whatsappUsername string,
 	return nil
 }
 
+func React(jid, contactName, whatsappUsername, statusJID string, reaction string) error {
+	jid = JIDToPhoneNumber(jid)
+
+	threadID, err := FindOrCreateForum(jid, contactName, whatsappUsername)
+	if err != nil {
+		return err
+	}
+
+	messages, err := session.ChannelMessages(threadID, 50, "", "", "")
+	if err != nil {
+		return err
+	}
+
+
+	for _, message := range messages {
+
+		if len(message.Embeds) != 1 {
+			continue
+		}
+
+		embed := message.Embeds[0]
+		footer := embed.Footer
+
+		if footer == nil {
+			continue
+		}
+
+		thisStatusJID := strings.Split(footer.Text, " • ")[1]
+		if thisStatusJID == statusJID {
+			err = session.MessageReactionAdd(threadID, message.ID, reaction)
+			if err != nil {
+				return err
+			} else {
+				return nil
+			}
+		}
+	}
+
+	return nil
+}
 
 func CloseBot() {
 	if session != nil {

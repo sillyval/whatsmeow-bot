@@ -21,7 +21,7 @@ func init() {
 
 type EmptyStatusCommand struct{}
 
-func (c *EmptyStatusCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *EmptyStatusCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
 
     fmt.Println("--- SENDING STATUS UPDATE ---")
 
@@ -31,7 +31,7 @@ func (c *EmptyStatusCommand) Execute(client *whatsmeow.Client, message *events.M
 
     if !message.Info.IsFromMe {
 		utils.React(client, message, "❌")
-		return
+		return nil
     }
 
     // Join the arguments to form the status text
@@ -40,7 +40,7 @@ func (c *EmptyStatusCommand) Execute(client *whatsmeow.Client, message *events.M
 	// Ensure the message is a text message
 	if message.Info.Type != "text" {
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 
@@ -55,7 +55,7 @@ func (c *EmptyStatusCommand) Execute(client *whatsmeow.Client, message *events.M
 	}
 
 	// Use types.StatusBroadcastJID for posting status updates
-	_, err := client.SendMessage(context.Background(), types.StatusBroadcastJID, statusMessage)
+	response, err := client.SendMessage(context.Background(), types.StatusBroadcastJID, statusMessage)
 	if err != nil {
 		fmt.Printf("Failed to post status update: %v\n", err)
 		utils.React(client, message, "❌")
@@ -63,6 +63,8 @@ func (c *EmptyStatusCommand) Execute(client *whatsmeow.Client, message *events.M
 		fmt.Println("Status update posted successfully.")
 		utils.React(client, message, "✅")
 	}
+
+	return &response.ID
 }
 
 func (c *EmptyStatusCommand) Name() string {

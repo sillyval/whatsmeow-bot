@@ -24,14 +24,14 @@ func init() {
 
 type FakeQuoteCommand struct{}
 
-func (c *FakeQuoteCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *FakeQuoteCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     if len(args) < 4 {
         fmt.Println("Usage: command <chatID> <sender> <fakeMessage> <replyMessage>")
-        return
+        return nil
     }
 	
 	if !message.Info.IsFromMe {
-		return
+		return nil
 	}
 
     chatID := args[0]
@@ -50,12 +50,12 @@ func (c *FakeQuoteCommand) Execute(client *whatsmeow.Client, message *events.Mes
     chatJID, err := types.ParseJID(chatID)
     if err != nil {
         fmt.Printf("Invalid chat ID: %s\n", err)
-        return
+        return nil
     }
     senderJID, err := types.ParseJID(sender)
     if err != nil {
         fmt.Printf("Invalid sender ID: %s\n", err)
-        return
+        return nil
     }
 
     fakeMessage := &waProto.Message{
@@ -118,21 +118,21 @@ func (c *FakeQuoteCommand) Execute(client *whatsmeow.Client, message *events.Mes
 		if err != nil {
 			utils.Reply(client, message, "Failed to create profile picture placeholder.")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 	} else {
 		profilePicData, _, err := utils.DownloadMediaFromURL(profilePic.URL)
 		if err != nil {
 			utils.Reply(client, message, "Failed to download profile picture.")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 
 		err = ioutil.WriteFile(savePath, profilePicData, 0644)
 		if err != nil {
 			utils.Reply(client, message, "Failed to save profile picture.")
 			utils.React(client, message, "❌")
-			return
+			return nil
 		}
 	}
 
@@ -144,14 +144,14 @@ func (c *FakeQuoteCommand) Execute(client *whatsmeow.Client, message *events.Mes
 		fmt.Println("Failed to execute quote.py:", err)
 		utils.Reply(client, message, "Failed to generate quote image.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	imageData, err := ioutil.ReadFile(outputPath)
 	if err != nil {
 		utils.Reply(client, message, "Failed to read generated image.")
 		utils.React(client, message, "❌")
-		return
+		return nil
 	}
 
 	success = utils.ReplyImageToChat(client, message, chatJID, *contextInfo.StanzaID, imageData, "image/png", "")
@@ -163,6 +163,8 @@ func (c *FakeQuoteCommand) Execute(client *whatsmeow.Client, message *events.Mes
 
 	os.Remove(savePath)
 	os.Remove(outputPath)
+
+	return nil
 }
 
 func (c *FakeQuoteCommand) Name() string {

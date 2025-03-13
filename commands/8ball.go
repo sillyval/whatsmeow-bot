@@ -15,7 +15,7 @@ func init() {
 
 type EightBallCommand struct{}
 
-func (c *EightBallCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *EightBallCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     var responses = []string{
         "It is certain", "It is decidedly so", "Without a doubt", "Yes definitely", "You may rely on it",
         "As I see it, yes", "Most likely", "Outlook good", "Yes", "Signs point to yes",
@@ -31,6 +31,8 @@ func (c *EightBallCommand) Execute(client *whatsmeow.Client, message *events.Mes
 	} else {
 		utils.React(client, message, "❌")
 	}
+
+    return nil
 }
 
 func (c *EightBallCommand) Name() string {

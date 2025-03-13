@@ -15,7 +15,7 @@ func init() {
     RegisterCommand(&ReplyChainCommand{})
 }
 
-func (c *ReplyChainCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *ReplyChainCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
 
 	fmt.Println(message.Message.GetConversation())
 	fmt.Println(message.RawMessage.Conversation)
@@ -28,6 +28,8 @@ func (c *ReplyChainCommand) Execute(client *whatsmeow.Client, message *events.Me
     } else {
         utils.Reply(client, message, "No prior messages in the chain.")
     }
+
+    return nil
 }
 
 func (c *ReplyChainCommand) Name() string {

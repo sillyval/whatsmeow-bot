@@ -28,7 +28,7 @@ func FormatDateWithOrdinal(t time.Time) string {
     }
 
     // Format the output string
-    return fmt.Sprintf("%d%s %s %d at %d:%02d%s",
+    return fmt.Sprintf("%d%s %s %d, %d:%02d%s",
         day, suffix, t.Month().String(), t.Year(), t.Hour()%12, t.Minute(), formatAMPM(t.Hour()))
 }
 
@@ -40,10 +40,10 @@ func formatAMPM(hour int) string {
     return "pm"
 }
 
-func (c *InfoCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *InfoCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     if !message.Info.IsGroup {
         utils.Reply(client, message, "This command can only be used in a group!")
-        return
+        return nil
     }
 
     groupJid := message.Info.Chat
@@ -51,7 +51,7 @@ func (c *InfoCommand) Execute(client *whatsmeow.Client, message *events.Message,
     if err != nil {
         fmt.Println("Error fetching group info:", err)
         utils.Reply(client, message, "Failed to retrieve group information.")
-        return
+        return nil
     }
 
 	fmt.Println(groupInfo)
@@ -84,6 +84,8 @@ groupName, groupNameOwnerJid, description, descOwner, chatJID, dateString, owner
     mentions := []string{groupNameOwnerJid, descOwnerJid, ownerJid}
     utils.SendMessageWithMentions(client, message.Info.Chat, replyMessage, mentions)
     utils.React(client, message, "✅")
+
+    return nil
 }
 
 func (c *InfoCommand) Name() string {

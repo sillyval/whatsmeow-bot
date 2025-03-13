@@ -15,12 +15,12 @@ func init() {
 
 type HelpCommand struct{}
 
-func (c *HelpCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *HelpCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
 	var response strings.Builder
 	commands := GetAllCommands()
 	if len(commands) == 0 {
 		utils.Reply(client, message, "No available commands.")
-		return
+		return nil
 	}
 
 	response.WriteString("```\n┌─── Available Commands ───\n")
@@ -55,6 +55,8 @@ func (c *HelpCommand) Execute(client *whatsmeow.Client, message *events.Message,
 	response.WriteString("└────────────\n```")
 
 	utils.Reply(client, message, response.String())
+
+	return nil
 }
 
 func (c *HelpCommand) Name() string {

@@ -18,14 +18,14 @@ func init() {
 
 type FakeReplyCommand struct{}
 
-func (c *FakeReplyCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *FakeReplyCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     if len(args) < 4 {
         fmt.Println("Usage: command <chatID> <sender> <fakeMessage> <replyMessage>")
-        return
+        return nil
     }
 	
 	if !message.Info.IsFromMe {
-		return
+		return nil
 	}
 
     chatID := args[0]
@@ -45,7 +45,7 @@ func (c *FakeReplyCommand) Execute(client *whatsmeow.Client, message *events.Mes
     chatJID, err := types.ParseJID(chatID)
     if err != nil {
         fmt.Printf("Invalid chat ID: %s\n", err)
-        return
+        return nil
     }
 
     // Construct a fake previous message
@@ -81,6 +81,8 @@ func (c *FakeReplyCommand) Execute(client *whatsmeow.Client, message *events.Mes
         fmt.Println("Failed to send the reply.")
 		utils.React(client, message, "❌")
     }
+    
+    return nil
 }
 
 func (c *FakeReplyCommand) Name() string {

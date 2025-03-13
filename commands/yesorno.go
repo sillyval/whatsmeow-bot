@@ -15,7 +15,7 @@ func init() {
 
 type YesOrNoCommand struct{}
 
-func (c *YesOrNoCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *YesOrNoCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     var responses = []string{
         "Yes", "No",
     }
@@ -28,6 +28,8 @@ func (c *YesOrNoCommand) Execute(client *whatsmeow.Client, message *events.Messa
 	} else {
 		utils.React(client, message, "❌")
 	}
+
+    return nil
 }
 
 func (c *YesOrNoCommand) Name() string {

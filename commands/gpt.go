@@ -24,10 +24,10 @@ func init() {
     RegisterCommand(&OpenAICommand{secretConfig: *secretConfig})
 }
 
-func (c *OpenAICommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) {
+func (c *OpenAICommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     if len(args) == 0 {
         utils.Reply(client, message, "Please provide a prompt")
-        return
+        return nil
     }
 
     prompt := strings.Join(args, " ")
@@ -38,11 +38,13 @@ func (c *OpenAICommand) Execute(client *whatsmeow.Client, message *events.Messag
     if err != nil {
 		utils.React(client, message, "❌")
         utils.Reply(client, message, fmt.Sprintf("Error: %v", err))
-        return
+        return nil
     }
 
     utils.Reply(client, message, " "+response) // adding the whitespace so that my AI messages cant be quoted
 	utils.React(client, message, "✅")
+
+    return nil
 }
 
 func (c *OpenAICommand) callOpenAI(prompt string) (string, error) {
