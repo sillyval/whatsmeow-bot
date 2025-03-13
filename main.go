@@ -19,11 +19,17 @@ import (
 
     _ "github.com/mattn/go-sqlite3"
     "whatsmeow-bot/utils"
+    "whatsmeow-bot/discordbot"
 )
 
 type Config struct {
-    Prefixes []string `json:"prefixes"`
+    Prefixes   []string `json:"prefixes"`
 }
+type SecretConfig struct {
+    DiscordToken string `json:"discord-token"`
+    OpenAIKey string `json:"openai-key"`
+}
+
 
 
 func parseArguments(input string) []string {
@@ -85,6 +91,17 @@ func LoadConfig(filename string) (*Config, error) {
     }
     return &config, nil
 }
+func LoadSecretConfig(filename string) (*SecretConfig, error) {
+    configBytes, err := ioutil.ReadFile(filename)
+    if err != nil {
+        return nil, err
+    }
+    var config SecretConfig
+    if err := json.Unmarshal(configBytes, &config); err != nil {
+        return nil, err
+    }
+    return &config, nil
+}
 
 
 func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}) {
@@ -103,30 +120,87 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 }
             }
 
-            if messagePrefix == "" {
-                return
-            }
-
             args := parseArguments(messageBody[len(messagePrefix):])
-            if len(args) == 0 {
-                return
-            }
-            commandName := strings.ToLower(args[0])
-            args = args[1:]
+            if len(args) != 0 && messagePrefix != "" {
+                commandName := strings.ToLower(args[0])
+                args = args[1:]
 
-            cmd := commands.GetCommand(commandName)
-            if cmd != nil {
-                cmd.Execute(client, v, args)
-            } else {
-                fmt.Printf("Command '%s' not recognized.\n", commandName)
+                cmd := commands.GetCommand(commandName)
+                if cmd != nil {
+                    cmd.Execute(client, v, args)
+                } else {
+                    fmt.Printf("Command '%s' not recognized.\n", commandName)
+                }
+            }
+
+            // logger
+           
+            if utils.IsStatusPost(v) && !utils.IsDeletedMessage(v) {
+
+                fmt.Println("Status post detected!")
+
+                if messageBody == "" {
+                    messageBody = "-# *no body provided*"
+                }
+
+                jid := v.Info.Sender
+                jidString := jid.String()
+                contactName := utils.GetContactName(client, jid)
+                pushUsername := utils.GetPushName(client, jid)
+                colourARGB := v.Message.ExtendedTextMessage.GetBackgroundArgb()
+                colourRGB := int(colourARGB & 0x00FFFFFF)
+    
+                if v.Message.ImageMessage == nil && v.Message.VideoMessage == nil && v.Message.AudioMessage == nil {
+                    logTextStatus(jidString, contactName, pushUsername, messageBody, &colourRGB)
+                } else {
+                    imageData, mimetype, err := utils.GetMediaFromMessage(client, v)
+                    if err == nil {
+                        logMediaStatus(jidString, contactName, pushUsername, messageBody, imageData, mimetype)
+                    }
+                }
             }
         }
     }
 }
 
+func initialiseDiscordBot(secret_config *SecretConfig) {
+    err := discordbot.InitBot(secret_config.DiscordToken)
+	if err != nil {
+		fmt.Printf("Failed to start discord bot: %v\n", err)
+	}
+	//defer discordbot.CloseBot()
+}
+
+func logTextStatus(jid string, contactName string, whatsappName string, statusText string, colour *int) {
+    fmt.Printf("Logging `%s` sent by `%s`", statusText, contactName)
+    
+    err := discordbot.LogStatus(jid, contactName, whatsappName, statusText, colour)
+	if err != nil {
+		fmt.Printf("Error logging status: %s\n", err)
+	}
+}
+func logMediaStatus(jid string, contactName string, whatsappName string, captionText string, imageData []byte, mimetype string) {
+    fmt.Printf("Logging `%s` (and an image) sent by `%s`", captionText, contactName)
+    err := discordbot.LogStatusWithMedia(jid, contactName, whatsappName, captionText, imageData, mimetype)
+	if err != nil {
+		fmt.Printf("Error logging image status: %s\n", err)
+	}
+}
+
 func main() {
 
     fmt.Println("Starting client...")
+
+    config, err := LoadConfig("config.json")
+    if err != nil {
+        panic(err)
+    }
+    secret_config, err := LoadSecretConfig("secret-config.json")
+    if err != nil {
+        panic(err)
+    }
+
+    initialiseDiscordBot(secret_config)
 
     dbLog := waLog.Stdout("Database", "ERROR", true) // DEBUG for full log
     clientLog := waLog.Stdout("Client", "ERROR", true) // ditto
@@ -139,11 +213,6 @@ func main() {
         panic(err)
     }
     client := whatsmeow.NewClient(deviceStore, clientLog)
-
-    config, err := LoadConfig("config.json")
-    if err != nil {
-        panic(err)
-    }
 
     client.AddEventHandler(eventHandler(client, config))
 

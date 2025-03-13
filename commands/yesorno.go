@@ -31,7 +31,7 @@ func (c *YesOrNoCommand) Execute(client *whatsmeow.Client, message *events.Messa
 }
 
 func (c *YesOrNoCommand) Name() string {
-    return "yesorno,decide,is,are,am,did,does"
+    return "yesorno,decide,is,are,am,did,does "
 }
 
 func (c *YesOrNoCommand) Description() string {

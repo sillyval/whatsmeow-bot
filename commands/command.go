@@ -8,6 +8,7 @@ import (
 )
 
 type SecretConfig struct {
+    DiscordToken string `json:"discord-token"`
     OpenAIKey string `json:"openai-key"`
 }
 

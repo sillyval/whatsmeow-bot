@@ -155,11 +155,12 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]b
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to download audio: %v", err)
 		}
-		exts, _ := mime.ExtensionsByType(audioMsg.GetMimetype())
-		if len(exts) == 0 {
-			return nil, "", fmt.Errorf("could not determine extension for audio mimetype %s", audioMsg.GetMimetype())
-		}
-		return data, exts[0], nil
+		mimeType := audioMsg.GetMimetype()
+		// exts, _ := mime.ExtensionsByType(audioMsg.GetMimetype())
+		// if len(exts) == 0 {
+		// 	return nil, "", fmt.Errorf("could not determine extension for audio mimetype %s", audioMsg.GetMimetype())
+		// }
+		return data, mimeType, nil
 	}
 
 	// Handle Video Message
@@ -168,11 +169,12 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]b
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to download video: %v", err)
 		}
-		exts, _ := mime.ExtensionsByType(videoMsg.GetMimetype())
-		if len(exts) == 0 {
-			return nil, "", fmt.Errorf("could not determine extension for video mimetype %s", videoMsg.GetMimetype())
-		}
-		return data, exts[0], nil
+		mimeType := videoMsg.GetMimetype()
+		// exts, _ := mime.ExtensionsByType(videoMsg.GetMimetype())
+		// if len(exts) == 0 {
+		// 	return nil, "", fmt.Errorf("could not determine extension for video mimetype %s", videoMsg.GetMimetype())
+		// }
+		return data, mimeType, nil
 	}
 
 	// Handle Document Message
@@ -437,4 +439,49 @@ func GetReplyChain(message *events.Message) []string {
 	fmt.Println(chain)
 
     return chain
+}
+func GetContactName(client *whatsmeow.Client, jid types.JID) string {
+
+	contact, err := client.Store.Contacts.GetContact(jid)
+	var contactName string
+	if err == nil {
+		if contact.FullName != "" {
+			contactName = contact.FullName
+		} else if contact.PushName != "" {
+			contactName = contact.PushName
+		} else {
+			contactName = jid.String()
+		}
+	} else {
+		contactName = jid.String()
+	}
+	return contactName
+}
+func GetPushName(client *whatsmeow.Client, jid types.JID) string {
+	contact, err := client.Store.Contacts.GetContact(jid)
+	var contactName string
+	if err == nil {
+		if contact.PushName != "" {
+			contactName = contact.PushName
+		} else if contact.FullName != "" {
+			contactName = contact.FullName
+		} else {
+			contactName = jid.String()
+		}
+	} else {
+		contactName = jid.String()
+	}
+	return contactName
+}
+func IsStatusPost(message *events.Message) bool {
+	return message.Info.Chat.String() == "status@broadcast"
+}
+func IsDeletedMessage(msg *events.Message) bool {
+	if msg.Message.GetProtocolMessage() != nil {
+		protoMsg := msg.Message.GetProtocolMessage()
+		if *protoMsg.Type == waProto.ProtocolMessage_REVOKE {
+			return true
+		}
+	}
+	return false
 }
