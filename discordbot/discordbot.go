@@ -14,8 +14,8 @@ import (
 
 var (
 	ForumChannelID = "1349513744082014309" 
-	GuildID = "1347216013891997798"
-	session        *discordgo.Session
+	GuildID =        "1347216013891997798"
+	session          *discordgo.Session
 )
 
 func InitBot(token string) error {
@@ -26,6 +26,9 @@ func InitBot(token string) error {
 		return fmt.Errorf("error creating Discord session: %v", err)
 	}
 
+	shard := [2]int{0, 3}
+	session.Identify.Shard = &shard
+
 	session.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuilds | discordgo.IntentsGuildMessageReactions
 
 	err = session.Open()
@@ -33,7 +36,7 @@ func InitBot(token string) error {
 		return fmt.Errorf("error opening Discord session: %v", err)
 	}
 
-	log.Println("Discord bot is running...")
+	fmt.Printf("Shard 1/3 (val) is running...\n",)
 	return nil
 }
 
@@ -171,12 +174,9 @@ func LogStatusWithMedia(jid, contactName, whatsappUsername, statusText, statusJI
 		return err
 	}
 
-	_, err = session.ChannelEditComplex(threadID, &discordgo.ChannelEdit{
+	session.ChannelEdit(threadID, &discordgo.ChannelEdit{
 		Name: fmt.Sprintf("%s / %s / %s", jid, contactName, whatsappUsername),
 	})
-	if err != nil {
-		log.Println("Couldn't update the name of the thread:", err)
-	}
 
 	currentTime := FormatDateWithOrdinal(time.Now())
 

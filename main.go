@@ -21,6 +21,7 @@ import (
     _ "github.com/mattn/go-sqlite3"
     "whatsmeow-bot/utils"
     "whatsmeow-bot/discordbot"
+    "github.com/skip2/go-qrcode"
 )
 
 type Config struct {
@@ -30,7 +31,6 @@ type SecretConfig struct {
     DiscordToken string `json:"discord-token"`
     OpenAIKey string `json:"openai-key"`
 }
-
 
 
 func parseArguments(input string) []string {
@@ -139,7 +139,10 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                     response := cmd.Execute(client, v, args)
 
                     if response != nil && v.Info.IsFromMe && strings.Contains(commandName, "status") {
-                        jid := v.Info.Sender
+
+                        //fmt.Println("LOGGING STATUS FROM COMMAND")
+
+                        jid := utils.StripJID(v.Info.Sender)
                         jidString := jid.String()
                         contactName := utils.GetContactName(client, jid)
                         pushUsername := utils.GetPushName(client, jid)
@@ -155,6 +158,12 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                             statusText = strings.Join(args, " ")
                         }
 
+                        if statusText == "" {
+                            statusText = "-# *no body provided*"
+                        }
+ 
+                        fmt.Printf("\nStatus `%s` logged\n", *response)
+
                         logTextStatus(jidString, contactName, pushUsername, statusText, *response, &colourRGB)
                     }
                 } else {
@@ -164,13 +173,20 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
 
             // logger
            
-            if utils.IsStatusPost(v) && utils.IsIncomingMessage(v) {
+            if utils.IsStatusPost(v) && utils.IsIncomingMessage(v) { // for some reason when using the status commands, whatsapp sends 2 events, one without the ExtendedTextMessage.
+
+                if (v.Message.ImageMessage == nil && v.Message.VideoMessage == nil && v.Message.AudioMessage == nil) && v.Message.ExtendedTextMessage == nil {
+                    return
+                }
+
+                //fmt.Println("LOGGING STATUS FROM INCOMING MESSAGE")
+                //fmt.Printf("\nMessageEvent: %s\n\nInfo: %s\n\nExtendedMessage: %s\n\n", v, v.Info, v.Message.ExtendedTextMessage)
 
                 if messageBody == "" {
                     messageBody = "-# *no body provided*"
                 }
 
-                jid := v.Info.Sender
+                jid := utils.StripJID(v.Info.Sender)
                 jidString := jid.String()
                 messageJID := v.Info.ID
                 contactName := utils.GetContactName(client, jid)
@@ -190,7 +206,9 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 }
             } else if utils.IsStatusPost(v) && utils.IsDeletedMessage(v) {
 
-                jid := v.Info.Sender
+                //fmt.Println("STATUS DELETED!")
+
+                jid := utils.StripJID(v.Info.Sender)
                 jidString := jid.String()
                 messageJID := utils.GetDeletedMessageID(v)
                 contactName := utils.GetContactName(client, jid)
@@ -263,7 +281,12 @@ func main() {
         }
         for evt := range qrChan {
             if evt.Event == "code" {
-                fmt.Println("Scan this QR code:", evt.Code)
+                qr, err := qrcode.New(evt.Code, qrcode.High)
+                if err != nil {
+                    fmt.Printf("Failed to generate QR code: %v", err)
+                }
+
+                fmt.Println(qr.ToSmallString(false))
             }
         }
     } else {

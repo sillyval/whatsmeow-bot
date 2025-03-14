@@ -581,3 +581,12 @@ func IsEditedMessage(msg *events.Message) bool {
 	}
 	return false
 }
+func StripJID(jid types.JID) types.JID {
+	localPart := jid.User
+	domainPart := jid.Server
+
+	localParts := strings.SplitN(localPart, ":", 2)
+	phoneNumber := localParts[0]
+
+	return types.NewJID(phoneNumber, domainPart)
+}
