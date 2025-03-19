@@ -3,7 +3,6 @@ package discordbot
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"mime"
 	"strings"
 	"whatsmeow-bot/utils"
@@ -52,7 +51,7 @@ func FindOrCreateForum(jid, contactName, whatsappUsername string) (string, error
 
 	threads, err := session.GuildThreadsActive(GuildID)
 	if err != nil {
-		log.Printf("Error retrieving active threads: %v\n", err)
+		fmt.Printf("Error retrieving active threads: %v\n", err)
 		return "", fmt.Errorf("failed to get active threads: %v", err)
 	}
 
@@ -110,13 +109,26 @@ func FormatDateWithOrdinal(t time.Time) string {
         day, suffix, t.Month().String(), t.Year(), t.Hour()%12, t.Minute(), formatAMPM(t.Hour()))
 }
 
-func LogStatus(jid, contactName, whatsappUsername, statusText, statusJID string, colour *int) error {
+type AlreadyExistsError struct{}
+func (e *AlreadyExistsError) Error() string{
+	return "Message already exists!"
+}
+
+func LogStatus(jid, contactName, whatsappUsername, statusText, statusJID string, colour *int, updateTitle bool) error {
+
+	message := GetMessageByJID(jid, contactName, whatsappUsername, statusJID)
+	if message != nil {
+		return &AlreadyExistsError{};
+	}
+	
 	jid = JIDToPhoneNumber(jid)
 
+	fmt.Printf("\nFinding forum...\n")
 	threadID, err := FindOrCreateForum(jid, contactName, whatsappUsername)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("\nFound forum!\n")
 
 	if colour == nil {
 		colourDefault := 0xffbeef // cotton candy pink :3
@@ -136,14 +148,19 @@ func LogStatus(jid, contactName, whatsappUsername, statusText, statusJID string,
 		Color:       *colour,
 	}
 
-	session.ChannelEdit(threadID, &discordgo.ChannelEdit{
-		Name: fmt.Sprintf("%s / %s / %s", jid, contactName, whatsappUsername),
-	})
+	if updateTitle {
+		session.ChannelEdit(threadID, &discordgo.ChannelEdit{
+			Name: fmt.Sprintf("%s / %s / %s", jid, contactName, whatsappUsername),
+		})
+	}
 
 	_, err = session.ChannelMessageSendEmbed(threadID, embed)
 	if err != nil {
 		return fmt.Errorf("failed to send status message: %v", err)
 	}
+
+	//fmt.Printf("\nEmbed sent: %s\n", embed)
+	fmt.Printf("\nEmbed sent\n")
 
 	return nil
 }
@@ -165,18 +182,27 @@ func GetFileExtension(mimetype string) string {
 }
 
 
-func LogStatusWithMedia(jid, contactName, whatsappUsername, statusText, statusJID string, mediaData []byte, mimetype string) error {
+func LogStatusWithMedia(jid, contactName, whatsappUsername, statusText, statusJID string, mediaData []byte, mimetype string, updateTitle bool) error {
 	
+	message := GetMessageByJID(jid, contactName, whatsappUsername, statusJID)
+	if message != nil {
+		return &AlreadyExistsError{};
+	}
+
 	jid = JIDToPhoneNumber(jid)
 
+	fmt.Printf("\nFinding forum...\n")
 	threadID, err := FindOrCreateForum(jid, contactName, whatsappUsername)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("\nFound forum!\n")
 
-	session.ChannelEdit(threadID, &discordgo.ChannelEdit{
-		Name: fmt.Sprintf("%s / %s / %s", jid, contactName, whatsappUsername),
-	})
+	if updateTitle {
+		session.ChannelEdit(threadID, &discordgo.ChannelEdit{
+			Name: fmt.Sprintf("%s / %s / %s", jid, contactName, whatsappUsername),
+		})
+	}
 
 	currentTime := FormatDateWithOrdinal(time.Now())
 
@@ -223,20 +249,23 @@ func LogStatusWithMedia(jid, contactName, whatsappUsername, statusText, statusJI
 		return fmt.Errorf("failed to send status message with media: %v", err)
 	}
 
+	//fmt.Printf("\nEmbed sent: %s\n", embed)
+	fmt.Printf("\nEmbed sent\n")
+
 	return nil
 }
 
-func React(jid, contactName, whatsappUsername, statusJID string, reaction string) error {
+func GetMessageByJID(jid, contactName, whatsappUsername, statusJID string) *discordgo.Message {
 	jid = JIDToPhoneNumber(jid)
 
 	threadID, err := FindOrCreateForum(jid, contactName, whatsappUsername)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	messages, err := session.ChannelMessages(threadID, 50, "", "", "")
 	if err != nil {
-		return err
+		return nil
 	}
 
 
@@ -255,21 +284,32 @@ func React(jid, contactName, whatsappUsername, statusJID string, reaction string
 
 		thisStatusJID := strings.Split(footer.Text, " • ")[1]
 		if thisStatusJID == statusJID {
-			err = session.MessageReactionAdd(threadID, message.ID, reaction)
-			if err != nil {
-				return err
-			} else {
-				return nil
-			}
+			return message;
 		}
 	}
 
 	return nil
 }
 
+func React(jid, contactName, whatsappUsername, statusJID string, reaction string) {
+	message := GetMessageByJID(jid, contactName, whatsappUsername, statusJID)
+	if message == nil {
+		return;
+	}
+
+	jid = JIDToPhoneNumber(jid)
+
+	threadID, err := FindOrCreateForum(jid, contactName, whatsappUsername)
+	if err != nil {
+		return
+	}
+
+	session.MessageReactionAdd(threadID, message.ID, reaction)
+}
+
 func CloseBot() {
 	if session != nil {
-		log.Println("Shutting down the bot...")
+		fmt.Println("Shutting down the bot...")
 		session.Close()
 	}
 }

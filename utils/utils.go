@@ -479,6 +479,42 @@ func SendMessageWithMentions(client *whatsmeow.Client, chatJID types.JID, messag
 
 	return true
 }
+func SendExtendedMessageWithMentions(client *whatsmeow.Client, chatJID types.JID, message *waProto.Message, mentions []string) *whatsmeow.SendResponse {
+	if client == nil {
+		fmt.Println("Client is not initialized")
+		return nil
+	}
+
+	var err error
+
+	var mentionedJIDs []string
+	for _, mention := range mentions {
+		if !strings.HasSuffix(mention, "@s.whatsapp.net") {
+			mention = mention + "@s.whatsapp.net"
+		}
+		mentionedJIDs = append(mentionedJIDs, mention)
+	}
+
+	contextInfo := message.ExtendedTextMessage.GetContextInfo();
+	if contextInfo == nil {
+		contextInfo = &waProto.ContextInfo{
+			MentionedJID: mentionedJIDs,
+		}
+	}
+	contextInfo.MentionedJID = mentionedJIDs
+
+	message.ExtendedTextMessage.ContextInfo = contextInfo;
+
+	fmt.Println(message.ExtendedTextMessage.ContextInfo);
+
+	response, err := client.SendMessage(context.Background(), chatJID, message)
+	if err != nil {
+		fmt.Printf("Failed to send message with mentions: %v\n", err)
+		return nil
+	}
+
+	return &response
+}
 func GetReplyChain(message *events.Message) []string {
     var chain []string
     currentMessage := message
@@ -515,38 +551,34 @@ func GetReplyChain(message *events.Message) []string {
 
     return chain
 }
-func GetContactName(client *whatsmeow.Client, jid types.JID) string {
+func GetContactName(client *whatsmeow.Client, jid types.JID) (string, bool) {
 
 	contact, err := client.Store.Contacts.GetContact(jid)
-	var contactName string
 	if err == nil {
 		if contact.FullName != "" {
-			contactName = contact.FullName
+			return contact.FullName, true
 		} else if contact.PushName != "" {
-			contactName = contact.PushName
+			return contact.PushName, false
 		} else {
-			contactName = jid.String()
+			return jid.String(), false
 		}
 	} else {
-		contactName = jid.String()
+		return jid.String(), false
 	}
-	return contactName
 }
-func GetPushName(client *whatsmeow.Client, jid types.JID) string {
+func GetPushName(client *whatsmeow.Client, jid types.JID) (string, bool) {
 	contact, err := client.Store.Contacts.GetContact(jid)
-	var contactName string
 	if err == nil {
 		if contact.PushName != "" {
-			contactName = contact.PushName
+			return contact.PushName, true
 		} else if contact.FullName != "" {
-			contactName = contact.FullName
+			return contact.FullName, false
 		} else {
-			contactName = jid.String()
+			return jid.String(), false
 		}
 	} else {
-		contactName = jid.String()
+		return jid.String(), false
 	}
-	return contactName
 }
 func IsStatusPost(message *events.Message) bool {
 	return message.Info.Chat.String() == "status@broadcast"

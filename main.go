@@ -144,8 +144,8 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
 
                         jid := utils.StripJID(v.Info.Sender)
                         jidString := jid.String()
-                        contactName := utils.GetContactName(client, jid)
-                        pushUsername := utils.GetPushName(client, jid)
+                        contactName, contactNameSuccess := utils.GetContactName(client, jid)
+                        pushUsername, pushUsernameSuccess := utils.GetPushName(client, jid)
 
                         var colourRGB int
                         var statusText string
@@ -162,9 +162,11 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                             statusText = "-# *no body provided*"
                         }
  
-                        fmt.Printf("\nStatus `%s` logged\n", *response)
+                        fmt.Printf("\nStatus `%s` logging...\n", *response)
 
-                        logTextStatus(jidString, contactName, pushUsername, statusText, *response, &colourRGB)
+                        logTextStatus(jidString, contactName, pushUsername, statusText, *response, &colourRGB, contactNameSuccess && pushUsernameSuccess)
+ 
+                        fmt.Printf("\nStatus `%s` logged!\n", *response)
                     }
                 } else {
                     fmt.Printf("Command '%s' not recognized.\n", commandName)
@@ -189,21 +191,23 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 jid := utils.StripJID(v.Info.Sender)
                 jidString := jid.String()
                 messageJID := v.Info.ID
-                contactName := utils.GetContactName(client, jid)
-                pushUsername := utils.GetPushName(client, jid)
+                contactName, contactNameSuccess := utils.GetContactName(client, jid)
+                pushUsername, pushNameSuccess := utils.GetPushName(client, jid)
                 colourARGB := v.Message.ExtendedTextMessage.GetBackgroundArgb()
                 colourRGB := int(colourARGB & 0x00FFFFFF)
  
-                fmt.Printf("\nStatus `%s` logged\n", messageJID)
+                fmt.Printf("\nStatus `%s` logging...\n", messageJID)
     
                 if v.Message.ImageMessage == nil && v.Message.VideoMessage == nil && v.Message.AudioMessage == nil {
-                    logTextStatus(jidString, contactName, pushUsername, messageBody, messageJID, &colourRGB)
+                    logTextStatus(jidString, contactName, pushUsername, messageBody, messageJID, &colourRGB, contactNameSuccess && pushNameSuccess)
                 } else {
                     imageData, mimetype, err := utils.GetMediaFromMessage(client, v)
                     if err == nil {
-                        logMediaStatus(jidString, contactName, pushUsername, messageBody, messageJID, imageData, mimetype)
+                        logMediaStatus(jidString, contactName, pushUsername, messageBody, messageJID, imageData, mimetype, contactNameSuccess && pushNameSuccess)
                     }
                 }
+
+                fmt.Printf("\nStatus `%s` logged!\n", messageJID)
             } else if utils.IsStatusPost(v) && utils.IsDeletedMessage(v) {
 
                 //fmt.Println("STATUS DELETED!")
@@ -211,8 +215,8 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 jid := utils.StripJID(v.Info.Sender)
                 jidString := jid.String()
                 messageJID := utils.GetDeletedMessageID(v)
-                contactName := utils.GetContactName(client, jid)
-                pushUsername := utils.GetPushName(client, jid)
+                contactName, _ := utils.GetContactName(client, jid)
+                pushUsername, _ := utils.GetPushName(client, jid)
 
                 discordbot.React(jidString, contactName, pushUsername, *messageJID, "❌")
             }
@@ -228,17 +232,17 @@ func initialiseDiscordBot(secret_config *SecretConfig) {
 	//defer discordbot.CloseBot()
 }
 
-func logTextStatus(jid, contactName, whatsappName, statusText, statusJID string, colour *int) {
+func logTextStatus(jid, contactName, whatsappName, statusText, statusJID string, colour *int, updateTitle bool) {
     fmt.Printf("Logging `%s` sent by `%s`", statusText, contactName)
     
-    err := discordbot.LogStatus(jid, contactName, whatsappName, statusText, statusJID, colour)
+    err := discordbot.LogStatus(jid, contactName, whatsappName, statusText, statusJID, colour, updateTitle)
 	if err != nil {
 		fmt.Printf("Error logging status: %s\n", err)
 	}
 }
-func logMediaStatus(jid, contactName, whatsappName, captionText, statusJID string, imageData []byte, mimetype string) {
+func logMediaStatus(jid, contactName, whatsappName, captionText, statusJID string, imageData []byte, mimetype string, updateTitle bool) {
     fmt.Printf("Logging `%s` (and an image) sent by `%s`", captionText, contactName)
-    err := discordbot.LogStatusWithMedia(jid, contactName, whatsappName, captionText, statusJID, imageData, mimetype)
+    err := discordbot.LogStatusWithMedia(jid, contactName, whatsappName, captionText, statusJID, imageData, mimetype, updateTitle)
 	if err != nil {
 		fmt.Printf("Error logging image status: %s\n", err)
 	}
