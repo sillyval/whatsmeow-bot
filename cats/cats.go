@@ -26,6 +26,7 @@ const (
 )
 
 func Start(client *whatsmeow.Client) {
+	fmt.Println("Started cat image uploader")
 	scheduleUploads(client)
 }
 
@@ -40,9 +41,10 @@ func scheduleUploads(client *whatsmeow.Client) {
 
 		nowHour, nowMinute := now.Hour(), now.Minute()
 
-		fmt.Printf("%v:%v\n", nowHour, nowMinute)
+		//fmt.Printf("%v:%v\n", nowHour, nowMinute)
 		
 		if (prevMinute != nowMinute) && ((nowHour == 7 && nowMinute == 0) || (nowHour == 22 && nowMinute == 0)) {
+			fmt.Printf("%v:%v, uploading!!\n", nowHour, nowMinute)
 			uploadCatImage(client)
 			prevMinute = nowMinute
 		}
