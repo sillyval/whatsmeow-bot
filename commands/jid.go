@@ -16,7 +16,13 @@ func init() {
 
 func (c *JIDCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
 	currentJID := message.Info.Chat.String()
-	utils.Reply(client, message, fmt.Sprintf("Current chat JID: %s", currentJID))
+    text := fmt.Sprintf("Current chat JID: %s", currentJID)
+
+    if utils.IsNewsletter(message) {
+        utils.NewsletterMessage(client, message.Info.Chat, text)
+    } else {
+        utils.Reply(client, message, text)
+    }
     return nil
 }
 

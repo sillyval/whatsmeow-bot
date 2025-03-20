@@ -1,14 +1,14 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"mime"
-	"strings"
-	"bytes"
 	"image"
 	"image/png"
+	"mime"
 	"os/exec"
+	"strings"
 
 	"io"
 	"net/http"
@@ -16,8 +16,8 @@ import (
 	"github.com/golang/protobuf/proto"
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
-	"go.mau.fi/whatsmeow/types/events"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 )
 
 func React(client *whatsmeow.Client, messageEvent *events.Message, emoji string) bool {
@@ -381,6 +381,26 @@ func ReplyImage(client *whatsmeow.Client, messageEvent *events.Message, imageDat
 
 	return true
 }
+func ReplyImageMessage(client *whatsmeow.Client, messageEvent *events.Message, imageMessage *waProto.Message) bool {
+	if client == nil {
+		fmt.Println("Client is not initialized")
+		return false
+	}
+
+	imageMessage.ImageMessage.ContextInfo = &waProto.ContextInfo{
+		StanzaID:    proto.String(messageEvent.Info.ID),
+		Participant: proto.String(messageEvent.Info.Sender.String()),
+		QuotedMessage: messageEvent.Message,
+	}
+
+	_, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, imageMessage)
+	if err != nil {
+		fmt.Printf("Error sending image reply: %v\n", err)
+		return false
+	}
+
+	return true
+}
 func ReplyImageToQuoted(client *whatsmeow.Client, message *events.Message, quotedMsgID string, imageData []byte, mimeType string, caption string) bool {
 	jid := message.Info.Chat
 
@@ -621,4 +641,78 @@ func StripJID(jid types.JID) types.JID {
 	phoneNumber := localParts[0]
 
 	return types.NewJID(phoneNumber, domainPart)
+}
+
+func IsNewsletter(msg *events.Message) bool {
+	return msg.Info.Chat.Server == "newsletter"
+}
+func NewsletterMessage(client *whatsmeow.Client, jid types.JID, messageText string) error {
+	if client != nil {
+		textMessage := &waProto.Message{
+			Conversation: proto.String(messageText),
+		}
+
+		_, err := client.SendMessage(context.Background(), jid, textMessage, whatsmeow.SendRequestExtra{
+			ID: client.GenerateMessageID(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to send '%s': %s", textMessage, err)
+		} else {
+			return nil
+		}
+	} else {
+		fmt.Println("Client is not initialized")
+		return fmt.Errorf("client is not initialized")
+	}
+}
+func NewsletterSendImage(client *whatsmeow.Client, jid types.JID, caption string, imageData []byte) error {
+	if client == nil {
+		return fmt.Errorf("WhatsMeow client is nil")
+	}
+
+	resp, err := client.UploadNewsletter(context.Background(), imageData, whatsmeow.MediaImage)
+
+	if err != nil {
+		return fmt.Errorf("failed to upload newsletter message: %w", err)
+	}
+
+	imageMsg := &waProto.ImageMessage{
+		Caption:  proto.String(caption),
+		Mimetype: proto.String("image/jpeg"),
+		URL:        &resp.URL,
+		DirectPath: &resp.DirectPath,
+		FileSHA256: resp.FileSHA256,
+		FileLength: &resp.FileLength,
+		// Newsletter media isn't encrypted, so the media key and file enc sha fields are not applicable
+	}
+	_, err = client.SendMessage(context.Background(), jid, &waProto.Message{
+		ImageMessage: imageMsg,
+	}, whatsmeow.SendRequestExtra{
+		// Unlike normal media, newsletters also include a "media handle" in the send request.
+		MediaHandle: resp.Handle,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to send newsletter message: %w", err)
+	}
+
+	return nil
+}
+func NewsletterSendImageMessage(client *whatsmeow.Client, jid types.JID, caption string, imageMessage *waProto.ImageMessage, handle string) error {
+	if client == nil {
+		return fmt.Errorf("WhatsMeow client is nil")
+	}
+
+	_, err := client.SendMessage(context.Background(), jid, &waProto.Message{
+		ImageMessage: imageMessage,
+	}, whatsmeow.SendRequestExtra{
+		// Unlike normal media, newsletters also include a "media handle" in the send request.
+		MediaHandle: handle,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to send newsletter message: %w", err)
+	}
+
+	return nil
 }

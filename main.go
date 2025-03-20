@@ -117,7 +117,7 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
     return func(evt interface{}) {
         if v, ok := evt.(*events.Message); ok {
 
-            //fmt.Printf("New message: \n%+v\n", v.Message)
+            fmt.Printf("New message: \n%+v\n", v)
 
             messageBody := utils.GetMessageBody(v.Message)
 
