@@ -1,5 +1,4 @@
 *.db
 venv
 secret*
-cat_images*
-cat_run.sh
+cats/*.jpg

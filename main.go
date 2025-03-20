@@ -20,6 +20,7 @@ import (
 
     _ "github.com/mattn/go-sqlite3"
     "whatsmeow-bot/utils"
+    "whatsmeow-bot/cats"
     "whatsmeow-bot/discordbot"
     "github.com/skip2/go-qrcode"
 )
@@ -276,6 +277,7 @@ func main() {
     client := whatsmeow.NewClient(deviceStore, clientLog)
 
     client.AddEventHandler(eventHandler(client, config))
+    go cats.Start(client)
 
     if client.Store.ID == nil {
         qrChan, _ := client.GetQRChannel(context.Background())
