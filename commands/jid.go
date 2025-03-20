@@ -20,8 +20,10 @@ func (c *JIDCommand) Execute(client *whatsmeow.Client, message *events.Message, 
 
     if utils.IsNewsletter(message) {
         utils.NewsletterMessage(client, message.Info.Chat, text)
+        utils.NewsletterReact(client, message, "✅")
     } else {
         utils.Reply(client, message, text)
+        utils.React(client, message, "✅")
     }
     return nil
 }

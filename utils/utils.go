@@ -716,3 +716,22 @@ func NewsletterSendImageMessage(client *whatsmeow.Client, jid types.JID, caption
 
 	return nil
 }
+func NewsletterReact(client *whatsmeow.Client, messageEvent *events.Message, emoji string) bool {
+	if len(emoji) == 0 {
+		fmt.Println("Please provide an emoji to react with.")
+		return false
+	}
+
+	if messageEvent == nil || messageEvent.Info.ID == "" {
+		fmt.Println("Invalid message or message ID is empty.")
+		return false
+	}
+
+	err := client.NewsletterSendReaction(messageEvent.Info.Chat, messageEvent.Info.ServerID, emoji, client.GenerateMessageID())
+	if err != nil {
+		fmt.Printf("Failed to send reaction: %v\n", err)
+		return false
+	} else {
+		return true
+	}
+}
