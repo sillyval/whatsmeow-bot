@@ -2,3 +2,4 @@
 venv
 secret*
 cats/*.jpg
+cats/*.txt

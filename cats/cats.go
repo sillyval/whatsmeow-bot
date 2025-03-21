@@ -98,8 +98,9 @@ func scheduleUploads(client *whatsmeow.Client) {
 		if (prevMinute != nowMinute) && ((nowHour == 7 && nowMinute == 0) || (nowHour == 22 && nowMinute == 0)) {
 			fmt.Printf("%v:%v, uploading!!\n", nowHour, nowMinute)
 			uploadCatImage(client)
-			prevMinute = nowMinute
 		}
+		prevMinute = nowMinute
+		
 		<-ticker.C
 	}
 }
