@@ -48,10 +48,66 @@ func Start(client *whatsmeow.Client) {
 	}
 	fmt.Printf("Total indexes: %v\n", totalImages)
 
-	previewNextUpload(client, currentIndex, totalImages)
+	PreviewNextUpload(client, currentIndex, totalImages, nil)
 
 	fmt.Println("Setting up timer...")
 	scheduleUploads(client)
+}
+
+func CurrentIndex() int {
+	currentIndex, err := readInt(currentFile)
+	if err != nil {
+		fmt.Printf("Error reading current index: %v", err)
+		return -1
+	}
+
+	return currentIndex
+}
+func TotalImages() int {
+	totalImages, err := readInt(totalFile)
+	if err != nil {
+		fmt.Printf("Error reading total images: %v", err)
+		return -1
+	}
+
+	return totalImages
+}
+func NextIndex(currentIndex int) int {
+	totalImages := TotalImages()
+
+	nextIndex := currentIndex + 1
+	if nextIndex > totalImages {
+		nextIndex = 1
+	}
+
+	return nextIndex
+}
+func Caption() string {
+	caption, err := readStr(captionFile)
+	if err != nil {
+		fmt.Printf("Error reading caption: %v", err)
+		caption = ""
+	}
+	return caption
+}
+
+
+
+func Skip(client *whatsmeow.Client) {
+	fmt.Println("Skipping this image")
+
+	newsletterJID, _ := types.ParseJID(testNewsletterJIDString)
+
+	currentIndex := CurrentIndex()
+	totalImages := TotalImages()
+	nextIndex := NextIndex(currentIndex)
+	fmt.Printf("Current index: %v/%v\n", currentIndex, totalImages)
+
+	utils.NewsletterMessage(client, newsletterJID, fmt.Sprintf("Skipping this image! Next: %v/%v", NextIndex(nextIndex), totalImages))
+
+	writeInt(currentFile, nextIndex)
+
+	PreviewNextUpload(client, nextIndex, totalImages, nil)
 }
 
 func OnMessage(client *whatsmeow.Client, messageEvent *events.Message) {
@@ -105,7 +161,7 @@ func scheduleUploads(client *whatsmeow.Client) {
 	}
 }
 
-func previewNextUpload(client *whatsmeow.Client, currentIndex, totalImages int) {
+func PreviewNextUpload(client *whatsmeow.Client, currentIndex, totalImages int, caption *string) {
 	nextIndex := currentIndex + 1
 	if nextIndex > totalImages {
 		nextIndex = 1 // Loop back to first image
@@ -123,40 +179,26 @@ func previewNextUpload(client *whatsmeow.Client, currentIndex, totalImages int) 
 	newsletterJID, _ := types.ParseJID(testNewsletterJIDString)
 	fmt.Printf("Sending to preview newsletter: %v\n", newsletterJID)
 
-	utils.NewsletterSendImage(client, newsletterJID, " next cat image that will be uploaded! send a message starting with `caption: ` to set the caption, new captions will update it", imageData)
+	if caption == nil {
+		captionText := " next cat image that will be uploaded! send a message starting with `caption: ` to set the caption, new captions will update it"
+		caption = &captionText
+	}
+
+	utils.NewsletterSendImage(client, newsletterJID, *caption, imageData)
 
 	fmt.Printf("Successfully sent cat_%d.jpg to newsletter\n", nextIndex)
 }
 
 func uploadCatImage(client *whatsmeow.Client) {
-	currentIndex, err := readInt(currentFile)
-	if err != nil {
-		fmt.Printf("Error reading current index: %v", err)
-		return
-	}
-	fmt.Printf("Current index: %v\n", currentIndex)
+	currentIndex := CurrentIndex()
+	totalImages := TotalImages()
+	nextIndex := NextIndex(currentIndex)
+	fmt.Printf("Current index: %v/%v\n", currentIndex, totalImages)
 
-	totalImages, err := readInt(totalFile)
-	if err != nil {
-		fmt.Printf("Error reading total images: %v", err)
-		return
-	}
-	fmt.Printf("Total indexes: %v\n", totalImages)
-
-	caption, err := readStr(captionFile)
-	if err != nil {
-		fmt.Printf("Error reading caption: %v", err)
-		caption = ""
-	}
+	caption := Caption()
 	writeStr(captionFile, "")
 
 	fmt.Printf("Caption: %v\n", caption)
-
-	nextIndex := currentIndex + 1
-	if nextIndex > totalImages {
-		nextIndex = 1 // Loop back to first image
-	}
-	fmt.Printf("Next index: %v\n", nextIndex)
 
 	imagePath := fmt.Sprintf("%scat_%d.jpg", imageDir, nextIndex)
 
@@ -181,7 +223,7 @@ func uploadCatImage(client *whatsmeow.Client) {
 	fmt.Printf("Successfully sent cat_%d.jpg to newsletter\n", nextIndex)
 	writeInt(currentFile, nextIndex)
 
-	previewNextUpload(client, nextIndex, totalImages)
+	PreviewNextUpload(client, nextIndex, totalImages, nil)
 }
 
 func readInt(filename string) (int, error) {
