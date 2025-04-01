@@ -43,8 +43,8 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 		utils.React(client, message, "❌")
 		return nil
 	}
-	if quotedText[0] == ' ' {
-		utils.Reply(client, message, "You can't quote the AI.")
+	if utils.IsSystemMessage(quotedMsg) {
+		utils.Reply(client, message, "You can't quote system messages")
 		utils.React(client, message, "❌")
 		return nil
 	}

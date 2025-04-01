@@ -132,10 +132,19 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 }
             }
 
+            var commandName string
+            quotedMessage := utils.GetQuotedMessage(v)
+            if quotedMessage != nil && utils.IsGPTMessage(quotedMessage) {
+                commandName = "gpt"
+            }
+
             args := parseArguments(messageBody[len(messagePrefix):])
-            if len(args) != 0 && messagePrefix != "" {
-                commandName := strings.ToLower(args[0])
-                args = args[1:]
+            if len(args) != 0 && (messagePrefix != "" || commandName != "") {
+
+                if commandName == "" {
+                    commandName = strings.ToLower(args[0])
+                    args = args[1:]
+                }
 
                 cmd := commands.GetCommand(commandName)
                 if cmd != nil {

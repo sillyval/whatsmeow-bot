@@ -59,7 +59,7 @@ func Message(client *whatsmeow.Client, messageEvent *events.Message, message str
 		return false
 	}
 }
-func Reply(client *whatsmeow.Client, messageEvent *events.Message, message string) bool {
+func Reply(client *whatsmeow.Client, messageEvent *events.Message, message string) *whatsmeow.SendResponse {
 	if client != nil {
 		quotedMessage := &waProto.Message{
 			ExtendedTextMessage: &waProto.ExtendedTextMessage{
@@ -72,17 +72,35 @@ func Reply(client *whatsmeow.Client, messageEvent *events.Message, message strin
 			},
 		}
 
-		_, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, quotedMessage)
+		resp, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, quotedMessage)
 		if err != nil {
 			fmt.Printf("Failed to send '%s': %s", message, err)
-			return false
+			return nil
 		} else {
-			return true
+			return &resp
 		}
 	} else {
 		fmt.Println("Client is not initialized")
-		return false
+		return nil
 	}
+}
+func ReplySystem(client *whatsmeow.Client, messageEvent *events.Message, response string) *whatsmeow.SendResponse {
+    systemResponse := "\u200B" + response
+    return Reply(client, messageEvent, systemResponse)
+}
+func IsSystemMessage(message *waProto.Message) bool {
+    if message == nil {
+        return false
+    }
+    messageContent := GetMessageBody(message)
+    return strings.HasPrefix(messageContent, "\u200B") || strings.HasPrefix(messageContent, " ")
+}
+func IsGPTMessage(message *waProto.Message) bool {
+    if message == nil {
+        return false
+    }
+    messageContent := GetMessageBody(message)
+    return strings.HasPrefix(messageContent, "\u200B")
 }
 func GetMessageBody(message *waProto.Message) string {
 	var messageBody string
@@ -96,6 +114,16 @@ func GetMessageBody(message *waProto.Message) string {
 		messageBody = *message.VideoMessage.Caption
 	}
 	return messageBody
+}
+func GetMessageContextInfo(message *waProto.Message) *waProto.ContextInfo {
+	if message.ExtendedTextMessage != nil {
+		return message.ExtendedTextMessage.GetContextInfo()
+	} else if message.ImageMessage != nil && message.ImageMessage.Caption != nil {
+		return message.ImageMessage.GetContextInfo()
+	} else if message.VideoMessage != nil && message.VideoMessage.Caption != nil {
+		return message.VideoMessage.GetContextInfo()
+	}
+	return nil
 }
 func ReplyMessage(client *whatsmeow.Client, chatJID types.JID, message *waProto.Message, contextInfo *waProto.ContextInfo, reply string) bool {
 	if client != nil {
@@ -534,6 +562,15 @@ func SendExtendedMessageWithMentions(client *whatsmeow.Client, chatJID types.JID
 	}
 
 	return &response
+}
+func GetQuotedMessage(message *events.Message) *waProto.Message {
+    if message.Message.ExtendedTextMessage != nil && message.Message.ExtendedTextMessage.ContextInfo != nil {
+        quotedMessage := message.Message.ExtendedTextMessage.ContextInfo.QuotedMessage
+        if quotedMessage != nil {
+            return quotedMessage
+        }
+    }
+    return nil
 }
 func GetReplyChain(message *events.Message) []string {
     var chain []string

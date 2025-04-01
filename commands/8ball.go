@@ -25,8 +25,8 @@ func (c *EightBallCommand) Execute(client *whatsmeow.Client, message *events.Mes
     
     response := responses[rand.Intn(len(responses))]
 	
-    success := utils.Reply(client, message, response)
-	if success {
+    resp := utils.Reply(client, message, response)
+	if resp != nil {
 		utils.React(client, message, "✅")
 	} else {
 		utils.React(client, message, "❌")

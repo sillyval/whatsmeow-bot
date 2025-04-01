@@ -3,3 +3,4 @@ venv
 secret*
 cats/*.jpg
 cats/*.txt
+conversation_chains.json

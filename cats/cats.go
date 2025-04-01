@@ -139,13 +139,20 @@ func OnMessage(client *whatsmeow.Client, messageEvent *events.Message) {
 }
 
 func scheduleUploads(client *whatsmeow.Client) {
+
+	londonLoc, err := time.LoadLocation("Europe/London")
+    if err != nil {
+        fmt.Printf("Error loading Europe/London location: %v\n", err)
+        return
+    }
+
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	prevMinute := -1
 
 	for {
-		now := time.Now()
+		now := time.Now().In(londonLoc)
 
 		nowHour, nowMinute := now.Hour(), now.Minute()
 
