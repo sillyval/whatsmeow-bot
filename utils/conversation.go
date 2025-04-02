@@ -1,5 +1,3 @@
-// utils/conversation.go
-
 package utils
 
 import (
@@ -7,53 +5,49 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 )
 
-// MessageEntry represents a single message in the conversation.
 type MessageEntry struct {
-    MessageContent string `json:"message_content"`
-    MessageJID     string `json:"message_jid"`
-    SenderJID      string `json:"sender_jid"`
-    SenderPushName string `json:"sender_push_name"`
-}
-
-// ConversationChain represents the conversation chain for a specific chat.
-type ConversationChain struct {
-    ChatJID       string         `json:"chat_jid"`
-    MostRecentJID string         `json:"most_recent_jid"`
-    Chain         []MessageEntry `json:"chain"`
+    Content       string    `json:"content"`
+    SenderPushName string   `json:"sender_push_name"`
+    SenderJID     string    `json:"sender_jid"`
+    QuotedJID     *string   `json:"quoted_jid"`
+    Timestamp     time.Time `json:"timestamp"`
+    ImageBase64   *string   `json:"image_base64,omitempty"`
 }
 
 var (
-    chainFilePath = "conversation_chains.json"
-    mutex         = &sync.Mutex{}
+    chainFilePath  = "conversation_messages.json"
+    mutex          = &sync.Mutex{}
+    expiryDuration = 24 * time.Hour
 )
 
-// LoadConversationChains reads the conversation chains from the JSON file.
-func LoadConversationChains() ([]ConversationChain, error) {
+// LoadMessages reads the conversation messages from the JSON file.
+func LoadMessages() (map[string]MessageEntry, error) {
     mutex.Lock()
     defer mutex.Unlock()
 
     file, err := os.Open(chainFilePath)
     if err != nil {
         if os.IsNotExist(err) {
-            return []ConversationChain{}, nil
+            return make(map[string]MessageEntry), nil
         }
         return nil, err
     }
     defer file.Close()
 
-    var chains []ConversationChain
+    var messages map[string]MessageEntry
     decoder := json.NewDecoder(file)
-    if err := decoder.Decode(&chains); err != nil {
+    if err := decoder.Decode(&messages); err != nil {
         return nil, err
     }
 
-    return chains, nil
+    return messages, nil
 }
 
-// SaveConversationChains writes the conversation chains to the JSON file.
-func SaveConversationChains(chains []ConversationChain) error {
+// SaveMessages writes the conversation messages to the JSON file.
+func SaveMessages(messages map[string]MessageEntry) error {
     mutex.Lock()
     defer mutex.Unlock()
 
@@ -65,98 +59,86 @@ func SaveConversationChains(chains []ConversationChain) error {
 
     encoder := json.NewEncoder(file)
     encoder.SetIndent("", "  ")
-    if err := encoder.Encode(&chains); err != nil {
+    if err := encoder.Encode(&messages); err != nil {
         return err
     }
 
     return nil
 }
 
-// DuplicateConversationChain duplicates the conversation chain for a given chat and conversation.
-func DuplicateConversationChain(chatJID, conversationJID string) error {
-    chains, err := LoadConversationChains()
+// PurgeOldMessages deletes messages older than the expiry duration.
+func PurgeOldMessages() error {
+    messages, err := LoadMessages()
     if err != nil {
         return err
     }
 
-    // Locate the chain to duplicate
-    for _, chain := range chains {
-        if chain.ChatJID == chatJID && chain.MostRecentJID == conversationJID {
-            // Create a new chain that is an exact copy of the old one
-            duplicatedChain := ConversationChain{
-                ChatJID:       chain.ChatJID,
-                MostRecentJID: chain.MostRecentJID,
-                Chain:         make([]MessageEntry, len(chain.Chain)),
-            }
-            copy(duplicatedChain.Chain, chain.Chain)
-
-            // Append the duplicated chain to the slice of chains
-            chains = append(chains, duplicatedChain)
-            
-            // Save the updated slice of chains
-            return SaveConversationChains(chains)
+    now := time.Now()
+    for id, msg := range messages {
+        if now.Sub(msg.Timestamp) > expiryDuration {
+            delete(messages, id)
         }
     }
+
+    fmt.Println("Old messages purged successfully.")
+
+    return SaveMessages(messages)
+}
+func StartPurgeTimer() {
+    ticker := time.NewTicker(1 * time.Hour)
+    PurgeOldMessages()
+
+    for range ticker.C {
+        err := PurgeOldMessages()
+        if err != nil {
+            fmt.Printf("Error purging old messages: %v", err)
+        } else {
+            fmt.Println("Old messages purged successfully.")
+        }
+    }
+}
+
+// GetConversationChain retrieves the message chain corresponding to a given message ID.
+func GetConversationChain(messageJID string) ([]MessageEntry, error) {
+    messages, err := LoadMessages()
+    if err != nil {
+        return nil, err
+    }
+
+    var chain []MessageEntry
+    currentID := messageJID
     
-    return fmt.Errorf("failed to duplicate conversation chain: chain not found")
-}
-
-// GetConversationChain retrieves the conversation chain for a specific chat.
-func GetConversationChain(chatJID, conversationJID string) ([]MessageEntry, bool, error) {
-    chains, err := LoadConversationChains()
-    if err != nil {
-        return nil, false, err
-    }
-
-    for _, chain := range chains {
-        if chain.ChatJID == chatJID && chain.MostRecentJID == conversationJID {
-            if len(chain.Chain) > 0 {
-                return chain.Chain, true, nil
-            }
-            return nil, false, nil
+    for {
+        msg, exists := messages[currentID]
+        if !exists {
+            break
         }
+        chain = append([]MessageEntry{msg}, chain...)
+
+        if msg.QuotedJID == nil {
+            break
+        }
+
+        currentID = *msg.QuotedJID
     }
 
-    return nil, false, nil
+    return chain, nil
 }
 
-// AppendToConversationChain adds a new message to the conversation chain.
-func AppendToConversationChain(chatJID, conversationJID string, message MessageEntry) error {
-    chains, err := LoadConversationChains()
+// AppendToConversationChain adds a new message to the conversation messages.
+func AppendToConversationChain(messageJID string, message MessageEntry) error {
+    messages, err := LoadMessages()
     if err != nil {
         return err
     }
 
-    // Locate the chain and append the message
-    for i, chain := range chains {
-        if chain.MostRecentJID == conversationJID {
-            chains[i].Chain = append(chains[i].Chain, message)
-            chains[i].MostRecentJID = message.MessageJID //Update to the most recent JID
-            return SaveConversationChains(chains)
-        }
-    }
-
-    // If conversationID not found, create a new chain
-    newChain := ConversationChain{
-        ChatJID:       chatJID,
-        MostRecentJID: message.MessageJID, //Update to the most recent JID
-        Chain:         []MessageEntry{message},
-    }
-    chains = append(chains, newChain)
-    return SaveConversationChains(chains)
+    messages[messageJID] = message
+    return SaveMessages(messages)
 }
 
-func AppendAndGetConversation(chatJID, conversationJID string, message MessageEntry) ([]MessageEntry, error) {
-    err := AppendToConversationChain(chatJID, conversationJID, message)
-    if err != nil {
-        return []MessageEntry{}, err
+func AppendAndGetConversation(messageJID string, message MessageEntry) ([]MessageEntry, error) {
+    if err := AppendToConversationChain(messageJID, message); err != nil {
+        return nil, err
     }
-    chain, exists, err := GetConversationChain(chatJID, message.MessageJID)
-    if err != nil {
-        return []MessageEntry{}, err
-    }
-    if !exists {
-        return []MessageEntry{}, fmt.Errorf("chain doesn't exist")
-    }
-	return chain, nil
+    return GetConversationChain(messageJID)
 }

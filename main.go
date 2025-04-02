@@ -125,6 +125,7 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
             messageBody := utils.GetMessageBody(v.Message)
 
             var messagePrefix string
+            var commandName string
             for _, prefix := range config.Prefixes {
                 if strings.HasPrefix(messageBody, prefix) {
                     messagePrefix = prefix
@@ -132,33 +133,39 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 }
             }
 
-            var commandName string
-            quotedMessage := utils.GetQuotedMessage(v)
-            if quotedMessage != nil && utils.IsGPTMessage(quotedMessage) {
-                commandName = "gpt"
+            args := parseArguments(messageBody[len(messagePrefix):])
+            if len(args) == 0 {
+                args = []string{""}
             }
 
-            args := parseArguments(messageBody[len(messagePrefix):])
-            if len(args) != 0 && (messagePrefix != "" || commandName != "") {
+            commandName = strings.ToLower(args[0])
+            cmd := commands.GetCommand(commandName)
 
-                if commandName == "" {
-                    commandName = strings.ToLower(args[0])
-                    args = args[1:]
-                }
+            if messagePrefix == "" {
+                cmd = nil
+            }
 
-                cmd := commands.GetCommand(commandName)
-                if cmd != nil {
+            quotedMessage := utils.GetQuotedMessage(v)
+            if cmd == nil && utils.IsGPTMessage(quotedMessage) {
+                commandName = "gpt"
+                cmd = commands.GetCommand(commandName)
+            } else {
+                args = args[1:]
+            }
+
+            if cmd != nil && (messagePrefix != "" || commandName != "") {
+                go func() {
                     response := cmd.Execute(client, v, args)
 
                     if response != nil && v.Info.IsFromMe && strings.Contains(commandName, "status") {
-
+    
                         //fmt.Println("LOGGING STATUS FROM COMMAND")
-
+    
                         jid := utils.StripJID(v.Info.Sender)
                         jidString := jid.String()
                         contactName, contactNameSuccess := utils.GetContactName(client, jid)
                         pushUsername, pushUsernameSuccess := utils.GetPushName(client, jid)
-
+    
                         var colourRGB int
                         var statusText string
                         if commandName == "colourstatus" {
@@ -169,20 +176,20 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                             colourRGB = int(0x000000)
                             statusText = strings.Join(args, " ")
                         }
-
+    
                         if statusText == "" {
                             statusText = "-# *no body provided*"
                         }
- 
+    
                         fmt.Printf("\nStatus `%s` logging...\n", *response)
-
+    
                         logTextStatus(jidString, contactName, pushUsername, statusText, *response, &colourRGB, contactNameSuccess && pushUsernameSuccess)
- 
+    
                         fmt.Printf("\nStatus `%s` logged!\n", *response)
-                    }
-                } else {
-                    fmt.Printf("Command '%s' not recognized.\n", commandName)
-                }
+                    }   
+                }()
+            } else {
+                //fmt.Printf("Command '%s' not recognized.\n", commandName)
             }
 
             // logger
@@ -289,6 +296,7 @@ func main() {
 
     client.AddEventHandler(eventHandler(client, config))
     go cats.Start(client)
+    go utils.StartPurgeTimer()
 
     if client.Store.ID == nil {
         qrChan, _ := client.GetQRChannel(context.Background())

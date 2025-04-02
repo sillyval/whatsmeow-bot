@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/png"
@@ -85,8 +86,12 @@ func Reply(client *whatsmeow.Client, messageEvent *events.Message, message strin
 	}
 }
 func ReplySystem(client *whatsmeow.Client, messageEvent *events.Message, response string) *whatsmeow.SendResponse {
-    systemResponse := "\u200B" + response
+    systemResponse := "\u200B<🤖> " + response
     return Reply(client, messageEvent, systemResponse)
+}
+func ReplyImageSystem(client *whatsmeow.Client, messageEvent *events.Message, imageData []byte, mimeType string, caption string) *whatsmeow.SendResponse {
+    systemCaption := "\u200B<🤖> " + caption
+    return ReplyImage(client, messageEvent, imageData, mimeType, systemCaption)
 }
 func IsSystemMessage(message *waProto.Message) bool {
     if message == nil {
@@ -171,7 +176,8 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]b
 	}
 
 	// Handle Image Message
-	if imgMsg := message.Message.GetImageMessage(); imgMsg != nil {
+	imgMsg := message.Message.GetImageMessage()
+	if imgMsg != nil {
 		data, err := client.Download(imgMsg)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to download image: %v", err)
@@ -223,6 +229,24 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]b
 	}
 
 	return nil, "", fmt.Errorf("no media found in message")
+}
+func DownloadAndEncodeImage(client *whatsmeow.Client, message *events.Message) (*string, error) {
+    mediaData, mimeType, err := GetMediaFromMessage(client, message)
+
+	if mediaData == nil {
+		return nil, fmt.Errorf("no media found!")
+	}
+
+    if err != nil {
+        return nil, fmt.Errorf("failed to download media: %v", err)
+    }
+
+    if strings.HasPrefix(mimeType, "image/") {
+        base64Data := base64.StdEncoding.EncodeToString(mediaData)
+        return &base64Data, nil
+    }
+
+    return nil, nil
 }
 func GetImageFromMessage(client *whatsmeow.Client, imageMessage *waProto.ImageMessage) ([]byte, string, error) {
 	// Ensure that the client and message are not nil
@@ -371,16 +395,16 @@ func SendImage(client *whatsmeow.Client, messageEvent *events.Message, imageData
 	}
 
 }
-func ReplyImage(client *whatsmeow.Client, messageEvent *events.Message, imageData []byte, mimeType string, caption string) bool {
+func ReplyImage(client *whatsmeow.Client, messageEvent *events.Message, imageData []byte, mimeType string, caption string) *whatsmeow.SendResponse {
 	if client == nil {
 		fmt.Println("Client is not initialized")
-		return false
+		return nil
 	}
 
 	uploaded, err := client.Upload(context.Background(), imageData, whatsmeow.MediaImage)
 	if err != nil {
 		fmt.Printf("Failed to upload file: %v\n", err)
-		return false
+		return nil
 	}
 
 	imageMessage := &waProto.Message{
@@ -401,13 +425,13 @@ func ReplyImage(client *whatsmeow.Client, messageEvent *events.Message, imageDat
 		},
 	}
 
-	_, err = client.SendMessage(context.Background(), messageEvent.Info.Chat, imageMessage)
+	resp, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, imageMessage)
 	if err != nil {
 		fmt.Printf("Error sending image reply: %v\n", err)
-		return false
+		return nil
 	}
 
-	return true
+	return &resp
 }
 func ReplyImageMessage(client *whatsmeow.Client, messageEvent *events.Message, imageMessage *waProto.Message) bool {
 	if client == nil {
@@ -566,6 +590,24 @@ func SendExtendedMessageWithMentions(client *whatsmeow.Client, chatJID types.JID
 func GetQuotedMessage(message *events.Message) *waProto.Message {
     if message.Message.ExtendedTextMessage != nil && message.Message.ExtendedTextMessage.ContextInfo != nil {
         quotedMessage := message.Message.ExtendedTextMessage.ContextInfo.QuotedMessage
+        if quotedMessage != nil {
+            return quotedMessage
+        }
+    }
+	if message.Message.ImageMessage != nil && message.Message.ImageMessage.ContextInfo != nil {
+        quotedMessage := message.Message.ImageMessage.ContextInfo.QuotedMessage
+        if quotedMessage != nil {
+            return quotedMessage
+        }
+    }
+	if message.Message.VideoMessage != nil && message.Message.VideoMessage.ContextInfo != nil {
+        quotedMessage := message.Message.VideoMessage.ContextInfo.QuotedMessage
+        if quotedMessage != nil {
+            return quotedMessage
+        }
+    }
+	if message.Message.AudioMessage != nil && message.Message.AudioMessage.ContextInfo != nil {
+        quotedMessage := message.Message.AudioMessage.ContextInfo.QuotedMessage
         if quotedMessage != nil {
             return quotedMessage
         }

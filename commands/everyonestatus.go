@@ -82,5 +82,5 @@ func (c *EveryoneStatusCommand) Name() string {
 }
 
 func (c *EveryoneStatusCommand) Description() string {
-    return "Posts a status update and logs recipients."
+    return ""
 }

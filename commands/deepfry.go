@@ -43,12 +43,16 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 	var imageMessage *waProto.ImageMessage
 	var stickerMessage *waProto.StickerMessage
 
+	if len(args) == 0 {
+		args = []string{""}
+	}
+
 	// Check if the message contains an image or a sticker
 	if message.Message.ImageMessage != nil {
 		imageMessage = message.Message.ImageMessage
 	} else if message.Message.StickerMessage != nil {
 		stickerMessage = message.Message.StickerMessage
-	} else if len(args) > 0 && isValidURL(args[0]) {
+	} else if isValidURL(args[0]) {
 		// handled later on
 	} else {
 		
@@ -89,7 +93,7 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		media, mimetype, err = utils.GetImageFromMessage(client, imageMessage)
 	} else if stickerMessage != nil {
 		media, mimetype, err = utils.GetStickerFromMessage(client, stickerMessage)
-	} else if len(args) > 0 && isValidURL(args[0]) {
+	} else if isValidURL(args[0]) {
         media, mimetype, err = utils.DownloadMediaFromURL(args[0])
 	} else {
 		fmt.Printf("url: %s, is valid? %t", args[0], isValidURL(args[0]))
@@ -98,7 +102,7 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		return nil
 	}
 
-	if err != nil {
+	if err != nil || media == nil {
 		fmt.Println(err)
 		utils.Reply(client, message, "Failed to download media.")
 		utils.React(client, message, "❌")
@@ -140,8 +144,8 @@ func (c *DeepfryCommand) Execute(client *whatsmeow.Client, message *events.Messa
 		return nil
 	}
 
-	success := utils.ReplyImage(client, message, deepfriedImage, mimetype, "")
-	if success {
+	resp := utils.ReplyImage(client, message, deepfriedImage, mimetype, "")
+	if resp != nil {
 		utils.React(client, message, "✅")
 	} else {
 		utils.React(client, message, "❌")
