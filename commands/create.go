@@ -110,9 +110,9 @@ func (c *CreateCommand) callDalle(contextChain []utils.MessageEntry) ([]byte, *s
     prompt := lastMessage.Content
 
     requestBody := map[string]interface{}{
-        "model":  "dall-e-2", // or "dall-e-3" based on desired model
+        "model":  "dall-e-3", // or "dall-e-3" based on desired model
         "prompt": prompt,
-        "size":   "512x512",
+        "size":   "1024x1024",
         "n":      1,
     }
 

@@ -134,11 +134,14 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
             }
 
             args := parseArguments(messageBody[len(messagePrefix):])
+            var firstArg string
             if len(args) == 0 {
-                args = []string{""}
+                firstArg = ""
+            } else {
+                firstArg = args[0]
             }
 
-            commandName = strings.ToLower(args[0])
+            commandName = strings.ToLower(firstArg)
             cmd := commands.GetCommand(commandName)
 
             if messagePrefix == "" {
@@ -150,10 +153,14 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 commandName = "gpt"
                 cmd = commands.GetCommand(commandName)
             } else {
-                args = args[1:]
+                if len(args) > 0 {
+                    args = args[1:]
+                } else {
+                    args = []string{}
+                }
             }
 
-            if cmd != nil && (messagePrefix != "" || commandName != "") {
+            if cmd != nil && !utils.IsStatusPost(v) && (messagePrefix != "" || commandName != "") {
                 go func() {
                     response := cmd.Execute(client, v, args)
 
@@ -220,7 +227,7 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 if v.Message.ImageMessage == nil && v.Message.VideoMessage == nil && v.Message.AudioMessage == nil {
                     logTextStatus(jidString, contactName, pushUsername, messageBody, messageJID, &colourRGB, contactNameSuccess && pushNameSuccess)
                 } else {
-                    imageData, mimetype, err := utils.GetMediaFromMessage(client, v)
+                    imageData, mimetype, err := utils.GetMediaFromMessage(client, v.Message)
                     if err == nil {
                         logMediaStatus(jidString, contactName, pushUsername, messageBody, messageJID, imageData, mimetype, contactNameSuccess && pushNameSuccess)
                     }

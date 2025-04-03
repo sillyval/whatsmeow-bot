@@ -169,14 +169,14 @@ func GetImageMessageFromData(client *whatsmeow.Client, imageData[]byte, caption 
 	}}
 	return message
 }
-func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]byte, string, error) {
+func GetMediaFromMessage(client *whatsmeow.Client, message *waProto.Message) ([]byte, string, error) {
 	// Ensure that the client and message are not nil
 	if client == nil || message == nil {
 		return nil, "", fmt.Errorf("invalid client or message")
 	}
 
 	// Handle Image Message
-	imgMsg := message.Message.GetImageMessage()
+	imgMsg := message.GetImageMessage()
 	if imgMsg != nil {
 		data, err := client.Download(imgMsg)
 		if err != nil {
@@ -188,7 +188,7 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]b
 	}
 
 	// Handle Audio Message
-	if audioMsg := message.Message.GetAudioMessage(); audioMsg != nil {
+	if audioMsg := message.GetAudioMessage(); audioMsg != nil {
 		data, err := client.Download(audioMsg)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to download audio: %v", err)
@@ -202,7 +202,7 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]b
 	}
 
 	// Handle Video Message
-	if videoMsg := message.Message.GetVideoMessage(); videoMsg != nil {
+	if videoMsg := message.GetVideoMessage(); videoMsg != nil {
 		data, err := client.Download(videoMsg)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to download video: %v", err)
@@ -216,7 +216,7 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]b
 	}
 
 	// Handle Document Message
-	if docMsg := message.Message.GetDocumentMessage(); docMsg != nil {
+	if docMsg := message.GetDocumentMessage(); docMsg != nil {
 		data, err := client.Download(docMsg)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to download document: %v", err)
@@ -230,11 +230,11 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *events.Message) ([]b
 
 	return nil, "", fmt.Errorf("no media found in message")
 }
-func DownloadAndEncodeImage(client *whatsmeow.Client, message *events.Message) (*string, error) {
+func DownloadAndEncodeImage(client *whatsmeow.Client, message *waProto.Message) (*string, error) {
     mediaData, mimeType, err := GetMediaFromMessage(client, message)
 
 	if mediaData == nil {
-		return nil, fmt.Errorf("no media found!")
+		return nil, fmt.Errorf("no media found")
 	}
 
     if err != nil {
