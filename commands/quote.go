@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/google/uuid"
 	"go.mau.fi/whatsmeow"
@@ -43,61 +44,91 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 		utils.React(client, message, "❌")
 		return nil
 	}
-	if utils.IsSystemMessage(quotedMsg) {
+
+	isGPT := utils.IsGPTMessage(quotedMsg);
+
+	if isGPT {
+		quotedText = strings.Join(strings.Split(quotedText, " ")[1:], " ")
+	}
+
+	if !isGPT && utils.IsSystemMessage(quotedMsg) {
 		utils.Reply(client, message, "You can't quote system messages")
 		utils.React(client, message, "❌")
 		return nil
 	}
 
 	var err error
-
-	senderJID := contextInfo.GetParticipant()
-	parsedJID, err := types.ParseJID(senderJID)
-	if err != nil {
-		fmt.Println("Error parsing JID")
-		utils.React(client, message, "❌")
-		return nil
-	}
-
-	contact, err := client.Store.Contacts.GetContact(parsedJID)
 	var senderName string
-	if err == nil {
-		if contact.PushName != "" {
-			senderName = contact.PushName
-		} else if contact.FullName != "" {
-			senderName = contact.FullName
+
+	if isGPT {
+		senderName = "ChatGPT"
+	} else {
+		senderJID := contextInfo.GetParticipant()
+		parsedJID, err := types.ParseJID(senderJID)
+		if err != nil {
+			fmt.Println("Error parsing JID")
+			utils.React(client, message, "❌")
+			return nil
+		}
+
+		contact, err := client.Store.Contacts.GetContact(parsedJID)
+		
+		if err == nil {
+			if contact.PushName != "" {
+				senderName = contact.PushName
+			} else if contact.FullName != "" {
+				senderName = contact.FullName
+			} else {
+				senderName = senderJID
+			}
 		} else {
 			senderName = senderJID
 		}
-	} else {
-		senderName = senderJID
 	}
 
-	filename := uuid.New().String()
+	var filename string
+	if isGPT {
+		filename = "chatgpt"
+	} else {
+		filename = uuid.New().String()
+	}
 	savePath := fmt.Sprintf("/tmp/%s.jpg", filename)
 
-	profilePic, err := client.GetProfilePictureInfo(parsedJID, &whatsmeow.GetProfilePictureParams{Preview: false})
-	if err != nil || profilePic.URL == "" {
-		fmt.Println("No profile picture found, using default black image.")
-		err = ioutil.WriteFile(savePath, make([]byte, 600*600*3), 0644) // Empty black image
-		if err != nil {
-			utils.Reply(client, message, "Failed to create profile picture placeholder.")
-			utils.React(client, message, "❌")
-			return nil
-		}
+	if isGPT {
+		savePath = "quote/chatgpt.png"
 	} else {
-		profilePicData, _, err := utils.DownloadMediaFromURL(profilePic.URL)
+
+		senderJID := contextInfo.GetParticipant()
+		parsedJID, err := types.ParseJID(senderJID)
 		if err != nil {
-			utils.Reply(client, message, "Failed to download profile picture.")
+			fmt.Println("Error parsing JID")
 			utils.React(client, message, "❌")
 			return nil
 		}
 
-		err = ioutil.WriteFile(savePath, profilePicData, 0644)
-		if err != nil {
-			utils.Reply(client, message, "Failed to save profile picture.")
-			utils.React(client, message, "❌")
-			return nil
+		profilePic, err := client.GetProfilePictureInfo(parsedJID, &whatsmeow.GetProfilePictureParams{Preview: false})
+		if err != nil || profilePic.URL == "" {
+			fmt.Println("No profile picture found, using default black image.")
+			err = ioutil.WriteFile(savePath, make([]byte, 600*600*3), 0644) // Empty black image
+			if err != nil {
+				utils.Reply(client, message, "Failed to create profile picture placeholder.")
+				utils.React(client, message, "❌")
+				return nil
+			}
+		} else {
+			profilePicData, _, err := utils.DownloadMediaFromURL(profilePic.URL)
+			if err != nil {
+				utils.Reply(client, message, "Failed to download profile picture.")
+				utils.React(client, message, "❌")
+				return nil
+			}
+	
+			err = ioutil.WriteFile(savePath, profilePicData, 0644)
+			if err != nil {
+				utils.Reply(client, message, "Failed to save profile picture.")
+				utils.React(client, message, "❌")
+				return nil
+			}
 		}
 	}
 
@@ -126,7 +157,9 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 		utils.React(client, message, "❌")
 	}
 
-	os.Remove(savePath)
+	if !isGPT {
+		os.Remove(savePath)
+	}
 	os.Remove(outputPath)
 
 	return nil
