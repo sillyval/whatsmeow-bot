@@ -47,7 +47,7 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 
 	isGPT := utils.IsGPTMessage(quotedMsg);
 
-	if isGPT {
+	if false {//isGPT {
 		quotedText = strings.Join(strings.Split(quotedText, " ")[1:], " ")
 	}
 
@@ -60,7 +60,7 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 	var err error
 	var senderName string
 
-	if isGPT {
+	if false {//if isGPT {
 		senderName = "ChatGPT"
 	} else {
 		senderJID := contextInfo.GetParticipant()
@@ -87,14 +87,14 @@ func (c *QuoteCommand) Execute(client *whatsmeow.Client, message *events.Message
 	}
 
 	var filename string
-	if isGPT {
+	if false {//if isGPT {
 		filename = "chatgpt"
 	} else {
 		filename = uuid.New().String()
 	}
 	savePath := fmt.Sprintf("/tmp/%s.jpg", filename)
 
-	if isGPT {
+	if false {//if isGPT {
 		savePath = "quote/chatgpt.png"
 	} else {
 

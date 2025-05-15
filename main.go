@@ -21,7 +21,6 @@ import (
     _ "github.com/mattn/go-sqlite3"
     "whatsmeow-bot/utils"
     "whatsmeow-bot/cats"
-    "whatsmeow-bot/discordbot"
     "github.com/skip2/go-qrcode"
 )
 
@@ -37,7 +36,7 @@ type SecretConfig struct {
 func parseArguments(input string) []string {
     var args []string
     current := strings.Builder{}
-    inQuotes := false
+    inCodeBlock := false
     escaping := false
 
     for i := 0; i < len(input); i++ {
@@ -51,19 +50,24 @@ func parseArguments(input string) []string {
 
         switch ch {
         case '\\':
-            if inQuotes {
+            if inCodeBlock {
                 escaping = true
             } else {
                 current.WriteByte(ch)
             }
-        case '"':
-            if inQuotes {
-                args = append(args, current.String())
-                current.Reset()
+        case '`':
+            if i+2 < len(input) && input[i+1] == '`' && input[i+2] == '`' {
+                if inCodeBlock {
+                    args = append(args, current.String())
+                    current.Reset()
+                }
+                inCodeBlock = !inCodeBlock
+                i += 2 // Skip the next two backticks
+            } else {
+                current.WriteByte(ch)
             }
-            inQuotes = !inQuotes
         case ' ':
-            if inQuotes {
+            if inCodeBlock {
                 current.WriteByte(ch)
             } else if current.Len() > 0 {
                 args = append(args, current.String())
@@ -118,6 +122,12 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
     return func(evt interface{}) {
         if v, ok := evt.(*events.Message); ok {
 
+            if v.Message.AudioMessage != nil {
+                go utils.SendAudioMessageRead(client, v.Info.Chat, v.Info.Sender, v.Info.ID)
+            } else {
+                go utils.SendMessageRead(client, v.Info.Chat, v.Info.Sender, v.Info.ID)
+            }
+
             go cats.OnMessage(client, v)
 
             //fmt.Printf("New message: \n%+v\n", v)
@@ -149,7 +159,15 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
             }
 
             quotedMessage := utils.GetQuotedMessage(v)
-            if cmd == nil && utils.IsGPTMessage(quotedMessage) {
+
+            isQuotingGPT := utils.IsGPTMessage(quotedMessage)
+            selfJID := client.Store.ID.User + "@" + client.Store.ID.Server
+            mentionsMe := utils.IsJIDMentioned(v, selfJID)
+            isDMS := utils.IsDMS(v) && (v.Info.Sender.User + "@" + v.Info.Sender.Server) != selfJID
+
+            //fmt.Printf("Is quoting GPT: %v\nMentions me: %v\nIs DMS: %v\n\n",isQuotingGPT, mentionsMe, isDMS)
+
+            if cmd == nil && (isQuotingGPT || mentionsMe || isDMS) {
                 commandName = "gpt"
                 cmd = commands.GetCommand(commandName)
             } else {
@@ -162,116 +180,13 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
 
             if cmd != nil && !utils.IsStatusPost(v) && (messagePrefix != "" || commandName != "") {
                 go func() {
-                    response := cmd.Execute(client, v, args)
-
-                    if response != nil && v.Info.IsFromMe && strings.Contains(commandName, "status") {
-    
-                        //fmt.Println("LOGGING STATUS FROM COMMAND")
-    
-                        jid := utils.StripJID(v.Info.Sender)
-                        jidString := jid.String()
-                        contactName, contactNameSuccess := utils.GetContactName(client, jid)
-                        pushUsername, pushUsernameSuccess := utils.GetPushName(client, jid)
-    
-                        var colourRGB int
-                        var statusText string
-                        if commandName == "colourstatus" {
-                            colourARGB := stringToARGB(args[0])
-                            colourRGB = int(colourARGB & 0x00FFFFFF)
-                            statusText = strings.Join(args[2:], " ")
-                        } else {
-                            colourRGB = int(0x000000)
-                            statusText = strings.Join(args, " ")
-                        }
-    
-                        if statusText == "" {
-                            statusText = "-# *no body provided*"
-                        }
-    
-                        fmt.Printf("\nStatus `%s` logging...\n", *response)
-    
-                        logTextStatus(jidString, contactName, pushUsername, statusText, *response, &colourRGB, contactNameSuccess && pushUsernameSuccess)
-    
-                        fmt.Printf("\nStatus `%s` logged!\n", *response)
-                    }   
+                    cmd.Execute(client, v, args)  
                 }()
             } else {
                 //fmt.Printf("Command '%s' not recognized.\n", commandName)
             }
-
-            // logger
-           
-            if utils.IsStatusPost(v) && utils.IsIncomingMessage(v) { // for some reason when using the status commands, whatsapp sends 2 events, one without the ExtendedTextMessage.
-
-                if (v.Message.ImageMessage == nil && v.Message.VideoMessage == nil && v.Message.AudioMessage == nil) && v.Message.ExtendedTextMessage == nil {
-                    return
-                }
-
-                //fmt.Println("LOGGING STATUS FROM INCOMING MESSAGE")
-                //fmt.Printf("\nMessageEvent: %s\n\nInfo: %s\n\nExtendedMessage: %s\n\n", v, v.Info, v.Message.ExtendedTextMessage)
-
-                if messageBody == "" {
-                    messageBody = "-# *no body provided*"
-                }
-
-                jid := utils.StripJID(v.Info.Sender)
-                jidString := jid.String()
-                messageJID := v.Info.ID
-                contactName, contactNameSuccess := utils.GetContactName(client, jid)
-                pushUsername, pushNameSuccess := utils.GetPushName(client, jid)
-                colourARGB := v.Message.ExtendedTextMessage.GetBackgroundArgb()
-                colourRGB := int(colourARGB & 0x00FFFFFF)
- 
-                fmt.Printf("\nStatus `%s` logging...\n", messageJID)
-    
-                if v.Message.ImageMessage == nil && v.Message.VideoMessage == nil && v.Message.AudioMessage == nil {
-                    logTextStatus(jidString, contactName, pushUsername, messageBody, messageJID, &colourRGB, contactNameSuccess && pushNameSuccess)
-                } else {
-                    imageData, mimetype, err := utils.GetMediaFromMessage(client, v.Message)
-                    if err == nil {
-                        logMediaStatus(jidString, contactName, pushUsername, messageBody, messageJID, imageData, mimetype, contactNameSuccess && pushNameSuccess)
-                    }
-                }
-
-                fmt.Printf("\nStatus `%s` logged!\n", messageJID)
-            } else if utils.IsStatusPost(v) && utils.IsDeletedMessage(v) {
-
-                //fmt.Println("STATUS DELETED!")
-
-                jid := utils.StripJID(v.Info.Sender)
-                jidString := jid.String()
-                messageJID := utils.GetDeletedMessageID(v)
-                contactName, _ := utils.GetContactName(client, jid)
-                pushUsername, _ := utils.GetPushName(client, jid)
-
-                discordbot.React(jidString, contactName, pushUsername, *messageJID, "❌")
-            }
         }
     }
-}
-
-func initialiseDiscordBot(secret_config *SecretConfig) {
-    err := discordbot.InitBot(secret_config.DiscordToken)
-	if err != nil {
-		fmt.Printf("Failed to start discord bot: %v\n", err)
-	}
-	//defer discordbot.CloseBot()
-}
-
-func logTextStatus(jid, contactName, whatsappName, statusText, statusJID string, colour *int, updateTitle bool) {
-    fmt.Printf("Logging `%s` sent by `%s`", statusText, contactName)
-    
-    err := discordbot.LogStatus(jid, contactName, whatsappName, statusText, statusJID, colour, updateTitle)
-	if err != nil {
-		fmt.Printf("Error logging status: %s\n", err)
-	}
-}
-func logMediaStatus(jid, contactName, whatsappName, captionText, statusJID string, imageData []byte, mimetype string, updateTitle bool) {
-    fmt.Printf("Logging `%s` (and an image) sent by `%s`", captionText, contactName)
-    err := discordbot.LogStatusWithMedia(jid, contactName, whatsappName, captionText, statusJID, imageData, mimetype, updateTitle)
-	if err != nil {
-		fmt.Printf("Error logging image status: %s\n", err)
-	}
 }
 
 func main() {
@@ -282,12 +197,6 @@ func main() {
     if err != nil {
         panic(err)
     }
-    secret_config, err := LoadSecretConfig("secret-config.json")
-    if err != nil {
-        panic(err)
-    }
-
-    initialiseDiscordBot(secret_config)
 
     dbLog := waLog.Stdout("Database", "ERROR", true) // DEBUG for full log
     clientLog := waLog.Stdout("Client", "ERROR", true) // ditto
@@ -303,7 +212,7 @@ func main() {
 
     client.AddEventHandler(eventHandler(client, config))
     go cats.Start(client)
-    go utils.StartPurgeTimer()
+    go utils.StartPurgeTimer(client)
 
     if client.Store.ID == nil {
         qrChan, _ := client.GetQRChannel(context.Background())

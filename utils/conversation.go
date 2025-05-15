@@ -6,6 +6,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"go.mau.fi/whatsmeow"
 )
 
 type MessageEntry struct {
@@ -67,7 +69,7 @@ func SaveMessages(messages map[string]MessageEntry) error {
 }
 
 // PurgeOldMessages deletes messages older than the expiry duration.
-func PurgeOldMessages() error {
+func PurgeOldMessages(client *whatsmeow.Client) error {
     messages, err := LoadMessages()
     if err != nil {
         return err
@@ -75,7 +77,11 @@ func PurgeOldMessages() error {
 
     now := time.Now()
     for id, msg := range messages {
-        if now.Sub(msg.Timestamp) > expiryDuration {
+
+        
+        selfJID := client.Store.ID.User + "@" + client.Store.ID.Server
+
+        if now.Sub(msg.Timestamp) > expiryDuration && (msg.SenderJID != "447904215425@s.whatsapp.net" && msg.SenderJID != selfJID) {
             delete(messages, id)
         }
     }
@@ -84,12 +90,12 @@ func PurgeOldMessages() error {
 
     return SaveMessages(messages)
 }
-func StartPurgeTimer() {
-    ticker := time.NewTicker(1 * time.Hour)
-    PurgeOldMessages()
+func StartPurgeTimer(client *whatsmeow.Client) {
+    ticker := time.NewTicker(31 * 24 * time.Hour)
+    PurgeOldMessages(client)
 
     for range ticker.C {
-        err := PurgeOldMessages()
+        err := PurgeOldMessages(client)
         if err != nil {
             fmt.Printf("Error purging old messages: %v", err)
         } else {

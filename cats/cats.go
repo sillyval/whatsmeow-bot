@@ -11,6 +11,10 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
+	waProto "go.mau.fi/whatsmeow/binary/proto"
+
+	
+	"github.com/golang/protobuf/proto"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -28,6 +32,9 @@ const (
 	captionFile             = "/home/oliver/whatsmeow-bot/cats/caption.txt"
 
 	testMode = false
+
+	cassidy = "447306473344"
+	oliver = "447904215425"
 )
 
 func Start(client *whatsmeow.Client) {
@@ -162,6 +169,14 @@ func scheduleUploads(client *whatsmeow.Client) {
 			fmt.Printf("%v:%v, uploading!!\n", nowHour, nowMinute)
 			uploadCatImage(client)
 		}
+
+		if (prevMinute != nowMinute) && ((nowHour == 8 && nowMinute == 0)) {
+			fmt.Println("8am!!!")
+			utils.SendMessageToJID(client, &waProto.Message{
+				Conversation: proto.String("its 8am. wake up."),
+			}, types.NewJID(cassidy, "s.whatsapp.net"))
+		}
+
 		prevMinute = nowMinute
 		
 		<-ticker.C
