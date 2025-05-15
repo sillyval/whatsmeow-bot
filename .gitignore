@@ -4,3 +4,4 @@ secret*
 cats/*.jpg
 cats/*.txt
 conversation_messages.json
+chat_stats/example_chat.txt
