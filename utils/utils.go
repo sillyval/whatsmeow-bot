@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"image"
 	"image/png"
-	"mime"
 	"os/exec"
+	"regexp"
 	"strings"
+	"time"
 
 	"io"
 	"net/http"
@@ -20,6 +21,11 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
+
+func getLondon() *time.Location {
+    result, _ := time.LoadLocation("Europe/London")
+    return result
+}
 
 func React(client *whatsmeow.Client, messageEvent *events.Message, emoji string) bool {
 	if len(emoji) == 0 {
@@ -32,6 +38,12 @@ func React(client *whatsmeow.Client, messageEvent *events.Message, emoji string)
 		return false
 	}
 
+	// if emoji == "⏳" {
+	// 	return SendTyping(client, messageEvent.Info.Chat, nil)
+	// } else if emoji == "❌" || emoji == "✅" {
+	// 	return SendStopTyping(client, messageEvent.Info.Chat, nil)
+	// }
+
 	reaction := client.BuildReaction(messageEvent.Info.Chat, messageEvent.Info.Sender, messageEvent.Info.ID, emoji)
 
 	_, err := client.SendMessage(context.Background(), messageEvent.Info.Chat, reaction)
@@ -42,6 +54,60 @@ func React(client *whatsmeow.Client, messageEvent *events.Message, emoji string)
 		return true
 	}
 }
+
+func SendMessageRead(client *whatsmeow.Client, chatJID types.JID, senderJID types.JID, messageJID types.MessageID) {
+	londonLoc := getLondon()
+	now := time.Now().In(londonLoc)
+	client.MarkRead([]types.MessageID{messageJID}, now, chatJID, senderJID)
+}
+func SendAudioMessageRead(client *whatsmeow.Client, chatJID types.JID, senderJID types.JID, messageJID types.MessageID) {
+	londonLoc := getLondon()
+	now := time.Now().In(londonLoc)
+	client.MarkRead([]types.MessageID{messageJID}, now, chatJID, senderJID, types.ReceiptTypePlayed)
+}
+func SendTyping(client *whatsmeow.Client, chatJID types.JID, isAudio *bool) bool {
+	if client != nil {
+		var prescenceMedia types.ChatPresenceMedia
+		if isAudio != nil {
+			if *isAudio {
+				prescenceMedia = types.ChatPresenceMediaAudio
+			} else {
+				prescenceMedia = types.ChatPresenceMediaText
+			}
+		} else {
+			prescenceMedia = types.ChatPresenceMediaText
+		}
+		err := client.SendChatPresence(chatJID, types.ChatPresenceComposing, prescenceMedia)
+		if err != nil {
+			fmt.Printf("Error sending typing prescence to %v: %v\n", chatJID, err)
+		} else {
+			return true
+		}
+	}
+	return false
+}
+func SendStopTyping(client *whatsmeow.Client, chatJID types.JID, isAudio *bool) bool {
+	if client != nil {
+		var prescenceMedia types.ChatPresenceMedia
+		if isAudio != nil {
+			if *isAudio {
+				prescenceMedia = types.ChatPresenceMediaAudio
+			} else {
+				prescenceMedia = types.ChatPresenceMediaText
+			}
+		} else {
+			prescenceMedia = types.ChatPresenceMediaText
+		}
+		err := client.SendChatPresence(chatJID, types.ChatPresencePaused, prescenceMedia)
+		if err != nil {
+			fmt.Printf("Error sending stopped typing prescence to %v: %v\n", chatJID, err)
+		} else {
+			return true
+		}
+	}
+	return false
+}
+
 func Message(client *whatsmeow.Client, messageEvent *events.Message, message string) bool {
 	if client != nil {
 		textMessage := &waProto.Message{
@@ -60,6 +126,20 @@ func Message(client *whatsmeow.Client, messageEvent *events.Message, message str
 		return false
 	}
 }
+func SendMessageToJID(client *whatsmeow.Client, message *waProto.Message, jid types.JID) bool {
+	if client != nil {
+		_, err := client.SendMessage(context.Background(), jid, message)
+		if err != nil {
+			fmt.Printf("Failed to send '%s': %s", message, err)
+			return false
+		} else {
+			return true
+		}
+	} else {
+		fmt.Println("Client is not initialized")
+		return false
+	}
+}
 func Reply(client *whatsmeow.Client, messageEvent *events.Message, message string) *whatsmeow.SendResponse {
 	if client != nil {
 		quotedMessage := &waProto.Message{
@@ -67,9 +147,11 @@ func Reply(client *whatsmeow.Client, messageEvent *events.Message, message strin
 				Text: proto.String(message),
 				ContextInfo: &waProto.ContextInfo{
 					StanzaID:    proto.String(messageEvent.Info.ID),
-					Participant: proto.String(messageEvent.Info.Sender.String()),
+					Participant: proto.String(messageEvent.Info.Sender.User+"@"+messageEvent.Info.Sender.Server),
 					QuotedMessage: messageEvent.Message,
 				},
+				//BackgroundArgb: proto.Uint32(0xFF000000), // black
+				//TextArgb: proto.Uint32(0xFFFFFFFF), // white
 			},
 		}
 
@@ -85,8 +167,56 @@ func Reply(client *whatsmeow.Client, messageEvent *events.Message, message strin
 		return nil
 	}
 }
+
+func RawReply(client *whatsmeow.Client, chatJID types.JID, messageID, participant *string, quotedMessage *waProto.Message, message string) *whatsmeow.SendResponse {
+	if client != nil {
+		quotedMessage := &waProto.Message{
+			ExtendedTextMessage: &waProto.ExtendedTextMessage{
+				Text: proto.String(message),
+				ContextInfo: &waProto.ContextInfo{
+					StanzaID:    messageID,
+					Participant: participant,
+					QuotedMessage: quotedMessage,
+				},
+			},
+		}
+
+		resp, err := client.SendMessage(context.Background(), chatJID, quotedMessage)
+		if err != nil {
+			fmt.Printf("Failed to send '%s': %s", message, err)
+			return nil
+		} else {
+			return &resp
+		}
+	} else {
+		fmt.Println("Client is not initialized")
+		return nil
+	}
+}
+
+func MatchCaseReplace(input, search, replacement string) string {
+	re := regexp.MustCompile("(?i)" + regexp.QuoteMeta(search))
+	return re.ReplaceAllStringFunc(input, func(matched string) string {
+		var result strings.Builder
+		for i, c := range matched {
+			if i >= len(replacement) {
+				result.WriteRune(c)
+				continue
+			}
+			r := rune(replacement[i])
+			if 'A' <= c && c <= 'Z' {
+				result.WriteRune(rune(strings.ToUpper(string(r))[0]))
+			} else {
+				result.WriteRune(rune(strings.ToLower(string(r))[0]))
+			}
+		}
+		return result.String()
+	})
+}
+
 func ReplySystem(client *whatsmeow.Client, messageEvent *events.Message, response string) *whatsmeow.SendResponse {
-    systemResponse := "\u200B<🤖> " + response
+    systemResponse := "\u200B" + response
+	systemResponse = MatchCaseReplace(systemResponse, "nigg", "nagg")
     return Reply(client, messageEvent, systemResponse)
 }
 func ReplyImageSystem(client *whatsmeow.Client, messageEvent *events.Message, imageData []byte, mimeType string, caption string) *whatsmeow.SendResponse {
@@ -117,8 +247,23 @@ func GetMessageBody(message *waProto.Message) string {
 		messageBody = *message.ImageMessage.Caption
 	} else if message.VideoMessage != nil && message.VideoMessage.Caption != nil {
 		messageBody = *message.VideoMessage.Caption
+	} else if message.DocumentMessage != nil && message.DocumentMessage.Caption != nil {
+		messageBody = *message.DocumentMessage.Caption
 	}
 	return messageBody
+}
+func GetMessageStanza(message *waProto.Message) types.MessageID {
+	var messageStanza types.MessageID
+	if message.ExtendedTextMessage != nil {
+		messageStanza = *message.GetExtendedTextMessage().ContextInfo.StanzaID
+	} else if message.ImageMessage != nil {
+		messageStanza =  *message.GetImageMessage().ContextInfo.StanzaID
+	} else if message.VideoMessage != nil {
+		messageStanza = *message.GetVideoMessage().ContextInfo.StanzaID
+	} else if message.DocumentMessage != nil {
+		messageStanza = *message.GetDocumentMessage().ContextInfo.StanzaID
+	}
+	return messageStanza
 }
 func GetMessageContextInfo(message *waProto.Message) *waProto.ContextInfo {
 	if message.ExtendedTextMessage != nil {
@@ -217,15 +362,14 @@ func GetMediaFromMessage(client *whatsmeow.Client, message *waProto.Message) ([]
 
 	// Handle Document Message
 	if docMsg := message.GetDocumentMessage(); docMsg != nil {
+		fmt.Printf("Document message!")
 		data, err := client.Download(docMsg)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to download document: %v", err)
 		}
-		exts, _ := mime.ExtensionsByType(docMsg.GetMimetype())
-		if len(exts) == 0 {
-			return nil, "", fmt.Errorf("could not determine extension for document mimetype %s", docMsg.GetMimetype())
-		}
-		return data, exts[0], nil
+		mimeType := docMsg.GetMimetype()
+
+		return data, mimeType, nil
 	}
 
 	return nil, "", fmt.Errorf("no media found in message")
@@ -550,6 +694,38 @@ func SendMessageWithMentions(client *whatsmeow.Client, chatJID types.JID, messag
 	}
 
 	return true
+}
+func IsJIDMentioned(msg *events.Message, targetJID string) bool {
+
+	number := strings.Split(targetJID, "@")[0]
+	if strings.Contains(GetMessageBody(msg.Message), number) {
+		return true
+	}
+
+    extendedTextMsg := msg.Message.GetExtendedTextMessage()
+    if extendedTextMsg == nil {
+        return false
+    }
+
+    contextInfo := extendedTextMsg.GetContextInfo()
+    if contextInfo == nil {
+        return false
+    }
+
+    for _, mentionedJID := range contextInfo.GetMentionedJID() {
+
+		//fmt.Println("Mention:",mentionedJID)
+		//fmt.Println("Looking to match:",targetJID)
+	
+        if mentionedJID == targetJID {
+            return true
+        }
+    }
+
+	return false
+}
+func IsDMS(message *events.Message) bool {
+	return !message.Info.IsGroup
 }
 func SendExtendedMessageWithMentions(client *whatsmeow.Client, chatJID types.JID, message *waProto.Message, mentions []string) *whatsmeow.SendResponse {
 	if client == nil {

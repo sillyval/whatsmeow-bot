@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd ~/whatsmeow-bot/
+cd ~/whatsmeow-status-bot/
 
 go build -o whatsmeow-bot main.go
 

@@ -20,7 +20,6 @@ import (
 
     _ "github.com/mattn/go-sqlite3"
     "whatsmeow-bot/utils"
-    "whatsmeow-bot/cats"
     "whatsmeow-bot/discordbot"
     "github.com/skip2/go-qrcode"
 )
@@ -37,7 +36,7 @@ type SecretConfig struct {
 func parseArguments(input string) []string {
     var args []string
     current := strings.Builder{}
-    inQuotes := false
+    inCodeBlock := false
     escaping := false
 
     for i := 0; i < len(input); i++ {
@@ -51,19 +50,24 @@ func parseArguments(input string) []string {
 
         switch ch {
         case '\\':
-            if inQuotes {
+            if inCodeBlock {
                 escaping = true
             } else {
                 current.WriteByte(ch)
             }
-        case '"':
-            if inQuotes {
-                args = append(args, current.String())
-                current.Reset()
+        case '`':
+            if i+2 < len(input) && input[i+1] == '`' && input[i+2] == '`' {
+                if inCodeBlock {
+                    args = append(args, current.String())
+                    current.Reset()
+                }
+                inCodeBlock = !inCodeBlock
+                i += 2 // Skip the next two backticks
+            } else {
+                current.WriteByte(ch)
             }
-            inQuotes = !inQuotes
         case ' ':
-            if inQuotes {
+            if inCodeBlock {
                 current.WriteByte(ch)
             } else if current.Len() > 0 {
                 args = append(args, current.String())
@@ -117,9 +121,6 @@ func stringToARGB(colorStr string) uint32 {
 func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}) {
     return func(evt interface{}) {
         if v, ok := evt.(*events.Message); ok {
-
-            go cats.OnMessage(client, v)
-
             //fmt.Printf("New message: \n%+v\n", v)
 
             messageBody := utils.GetMessageBody(v.Message)
@@ -148,16 +149,10 @@ func eventHandler(client *whatsmeow.Client, config *Config) func(evt interface{}
                 cmd = nil
             }
 
-            quotedMessage := utils.GetQuotedMessage(v)
-            if cmd == nil && utils.IsGPTMessage(quotedMessage) {
-                commandName = "gpt"
-                cmd = commands.GetCommand(commandName)
+            if len(args) > 0 {
+                args = args[1:]
             } else {
-                if len(args) > 0 {
-                    args = args[1:]
-                } else {
-                    args = []string{}
-                }
+                args = []string{}
             }
 
             if cmd != nil && !utils.IsStatusPost(v) && (messagePrefix != "" || commandName != "") {
@@ -302,8 +297,6 @@ func main() {
     client := whatsmeow.NewClient(deviceStore, clientLog)
 
     client.AddEventHandler(eventHandler(client, config))
-    go cats.Start(client)
-    go utils.StartPurgeTimer()
 
     if client.Store.ID == nil {
         qrChan, _ := client.GetQRChannel(context.Background())
