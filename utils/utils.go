@@ -54,6 +54,22 @@ func React(client *whatsmeow.Client, messageEvent *events.Message, emoji string)
 		return true
 	}
 }
+func RawReact(client *whatsmeow.Client, chat, sender types.JID, messageID types.MessageID, emoji string) bool {
+	if len(emoji) == 0 {
+		fmt.Println("Please provide an emoji to react with.")
+		return false
+	}
+
+	reaction := client.BuildReaction(chat, sender, messageID, emoji)
+
+	_, err := client.SendMessage(context.Background(), chat, reaction)
+	if err != nil {
+		fmt.Printf("Failed to send reaction: %v\n", err)
+		return false
+	} else {
+		return true
+	}
+}
 
 func SendMessageRead(client *whatsmeow.Client, chatJID types.JID, senderJID types.JID, messageJID types.MessageID) {
 	londonLoc := getLondon()

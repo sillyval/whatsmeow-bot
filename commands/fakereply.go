@@ -20,7 +20,7 @@ type FakeReplyCommand struct{}
 
 func (c *FakeReplyCommand) Execute(client *whatsmeow.Client, message *events.Message, args []string) *string {
     if len(args) < 4 {
-        fmt.Println("Usage: command <chatID> <sender> <fakeMessage> <replyMessage>")
+        utils.Reply(client, message, "Usage: command <chatID> <sender> <fakeMessage> <replyMessage>")
         return nil
     }
 	
